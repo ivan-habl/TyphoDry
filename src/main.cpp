@@ -2,9 +2,12 @@
 #include "ui.h"
 #include "vars.h"
 #include <Adafruit_SHT4x.h>
+#include <Arduino.h>
+#include <MQTT.h>
 #include <QuickPID.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
+#include <WiFi.h>
 #include <lvgl.h>
 
 #define I2C_SDA 21
@@ -20,9 +23,50 @@ unsigned long previousMillisLVGLwork = 0;
 const long intervalLVGLwork = 5;
 unsigned long previousMillisPIDprint = 0;
 const long intervalPIDprint = 500;
+unsigned long previousMillisMQTT = 0;
+const long intervalMQTT = 10;
+
+const char ssid[] = "I love pussy";
+const char pass[] = "*Cbufhtnf#";
+
+WiFiClient net;
+MQTTClient client;
+
+unsigned long lastMillis = 0;
+
+void connect() {
+    Serial.print("checking wifi...");
+    while (WiFi.status() != WL_CONNECTED) {
+        Serial.print(".");
+        delay(1000);
+    }
+
+    Serial.print("\nconnecting...");
+    while (!client.connect("arduino", "public", "public")) {
+        Serial.print(".");
+        delay(1000);
+    }
+
+    Serial.println("\nconnected!");
+
+    client.subscribe("Drier/Transmit/SHT40/Temperature");
+    client.subscribe("Drier/Transmit/SHT40/Humidity");
+    client.subscribe("Drier/Transmit/Signals/Discrete/PowerSt");
+    client.subscribe("Drier/Transmit/Signals/Discrete/PIDSt");
+    // client.unsubscribe("/hello");
+}
+
+void messageReceived(String &topic, String &payload) {
+    Serial.println("incoming: " + topic + " - " + payload);
+
+    // Note: Do not use the client in the callback to publish, subscribe or
+    // unsubscribe as it may cause deadlocks when other things arrive while
+    // sending and receiving acknowledgments. Instead, change a global variable,
+    // or push to a queue and handle it in the loop after calling `client.loop()`.
+}
 
 /*LVGL draw into this buffer, 1/10 screen size usually works well. The size is in bytes*/
-#define DRAW_BUF_SIZE (TFT_HOR_RES * TFT_VER_RES / 10 * (LV_COLOR_DEPTH / 8))
+#define DRAW_BUF_SIZE (TFT_HOR_RES * TFT_VER_RES / 20 * (LV_COLOR_DEPTH / 8))
 uint32_t draw_buf[DRAW_BUF_SIZE / 4];
 
 TFT_eSPI tft = TFT_eSPI(TFT_HOR_RES, TFT_VER_RES); /* TFT instance */
@@ -73,7 +117,7 @@ const byte relayPin = 13;
 
 const unsigned long windowSize = 4000;
 const byte debounce = 50;
-float Input, Output, Setpoint = 50, Kp = 111.609, Ki = 0.100, Kd = 0.399, Duty = 0; //duty = 45;
+float Input, Output, Setpoint = 50, Kp = 111.609, Ki = 0.100, Kd = 0.399, Duty = 45; // duty = 45;
 
 unsigned long windowStartTime, nextSwitchTime;
 boolean relayStatus = false;
@@ -118,6 +162,12 @@ void checkUserInput() {
 
 void setup() {
     Serial.begin(115200);
+    WiFi.begin(ssid, pass);
+
+    client.begin("mserver.lan", net);
+    client.onMessage(messageReceived);
+
+    connect();
 
     sht4.begin(&Wire);
 
@@ -156,12 +206,21 @@ void setup() {
 }
 
 void loop() {
+    unsigned long currentMillis = millis();
+
+    if (currentMillis - previousMillisMQTT >= intervalMQTT) {
+
+        client.loop();
+
+        if (!client.connected()) {
+            connect();
+        }
+    }
+
     sensors_event_t humidity, temp;
     sht4.getEvent(&humidity, &temp);
 
     analogWrite(FAN_PWM_PIN, Duty);
-
-    unsigned long currentMillis = millis();
 
     if (currentMillis - previousMillisLVGLwork >= intervalLVGLwork) {
         previousMillisLVGLwork = currentMillis;
@@ -188,6 +247,7 @@ void loop() {
             relayStatus = true;
             digitalWrite(relayPin, HIGH);
             set_var_solid_relay_st(255);
+            client.publish("Drier/Transmit/Discrete/PIDSt", "1");
         }
     } else if (relayStatus && Output < (msNow - windowStartTime)) {
         if (msNow > nextSwitchTime) {
@@ -195,7 +255,22 @@ void loop() {
             relayStatus = false;
             digitalWrite(relayPin, LOW);
             set_var_solid_relay_st(0);
+            client.publish("Drier/Transmit/Discrete/PIDSt", "0");
         }
+    }
+    char temperatureStr[10];
+    char humidityStr[10];
+    char powerStSrt[2];
+
+    dtostrf(temp.temperature, 2, 2, temperatureStr);
+    dtostrf(humidity.relative_humidity, 2, 2, humidityStr);
+    dtostrf(get_var_drier_state(), 1, 0, powerStSrt);
+
+    if (millis() - lastMillis > 1000) {
+        lastMillis = millis();
+        client.publish("Drier/Transmit/SHT40/Temperature", temperatureStr);
+        client.publish("Drier/Transmit/SHT40/Humidity", humidityStr);
+        client.publish("Drier/Transmit/Discrete/PowerSt", powerStSrt);
     }
 
     if (currentMillis - previousMillisPIDprint >= intervalPIDprint) {
