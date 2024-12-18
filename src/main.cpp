@@ -37,6 +37,18 @@ const long intervalMQTT = 10;
 const char ssid[] = "I love pussy";
 const char pass[] = "*Cbufhtnf#";
 
+// Флаги состояния
+bool isWiFiConnected = false;
+bool isClientConnected = false;
+
+// Таймеры для периодических проверок
+unsigned long lastWiFiCheck = 0;
+unsigned long lastClientCheck = 0;
+
+// Интервалы проверки
+const unsigned long wifiCheckInterval = 1000;
+const unsigned long clientCheckInterval = 1000;
+
 WiFiClient net;
 MQTTClient client;
 OneWire oneWire(ONE_WIRE_BUS);
@@ -47,25 +59,59 @@ const int sensorCount = 4; // Количество датчиков
 
 unsigned long lastMillis = 0;
 
+// void connect() {
+//     Serial.print("checking wifi...");
+//     while (WiFi.status() != WL_CONNECTED) {
+//         Serial.print(".");
+//         delay(1000);
+//     }
+
+//     Serial.print("\nconnecting...");
+//     while (!client.connect("arduino", "public", "public")) {
+//         Serial.print(".");
+//         delay(1000);
+//     }
+
+//     Serial.println("\nconnected!");
+
+//     client.subscribe("Drier/Transmit/SHT40/Temperature");
+//     client.subscribe("Drier/Transmit/SHT40/Humidity");
+//     client.subscribe("Drier/Transmit/Signals/Discrete/PowerSt");
+//     client.subscribe("Drier/Transmit/Signals/Discrete/PIDSt");
+// }
+
 void connect() {
-    Serial.print("checking wifi...");
-    while (WiFi.status() != WL_CONNECTED) {
-        Serial.print(".");
-        delay(1000);
+    if (!isWiFiConnected) {
+        // Проверяем Wi-Fi с интервалом
+        if (millis() - lastWiFiCheck >= wifiCheckInterval) {
+            lastWiFiCheck = millis();
+            Serial.print("checking wifi...");
+            if (WiFi.status() == WL_CONNECTED) {
+                isWiFiConnected = true;
+                Serial.println("\nWiFi connected!");
+            } else {
+                Serial.print(".");
+            }
+        }
+    } else if (!isClientConnected) {
+        // Проверяем подключение клиента с интервалом
+        if (millis() - lastClientCheck >= clientCheckInterval) {
+            lastClientCheck = millis();
+            Serial.print("connecting client...");
+            if (client.connect("arduino", "public", "public")) {
+                isClientConnected = true;
+                Serial.println("\nClient connected!");
+                
+                // Подписываемся на топики
+                client.subscribe("Drier/Transmit/SHT40/Temperature");
+                client.subscribe("Drier/Transmit/SHT40/Humidity");
+                client.subscribe("Drier/Transmit/Signals/Discrete/PowerSt");
+                client.subscribe("Drier/Transmit/Signals/Discrete/PIDSt");
+            } else {
+                Serial.print(".");
+            }
+        }
     }
-
-    Serial.print("\nconnecting...");
-    while (!client.connect("arduino", "public", "public")) {
-        Serial.print(".");
-        delay(1000);
-    }
-
-    Serial.println("\nconnected!");
-
-    client.subscribe("Drier/Transmit/SHT40/Temperature");
-    client.subscribe("Drier/Transmit/SHT40/Humidity");
-    client.subscribe("Drier/Transmit/Signals/Discrete/PowerSt");
-    client.subscribe("Drier/Transmit/Signals/Discrete/PIDSt");
 }
 
 void messageReceived(String &topic, String &payload) {
@@ -126,11 +172,11 @@ static uint32_t my_tick(void) {
 
 const byte FAN_PWM_PIN = 12;
 const byte relayPin = 13;
-const byte Recylcuration_PWM_PIN = 25;
+const byte Recylcuration_PWM_PIN = 27;
 
 const unsigned long windowSize = 2000;
-float Input, Output, Setpoint = 25, Kp = 9.423, Ki = 0.018, Kd = 0.141;
-int dutyFan = 450, dutyRecylcuration = 450;
+float Input, Output, Setpoint = 25, Kp = 8.583, Ki = 0.038, Kd = 0.15;
+int dutyFan = 512, dutyRecylcuration = 1023;
 
 unsigned long windowStartTime, nextSwitchTime;
 boolean relayStatus = false;
@@ -210,7 +256,7 @@ void checkUserInput() {
             while (!Serial.available()) {
             }
             dutyRecylcuration = Serial.parseInt();
-            analogWrite(Recylcuration_PWM_PIN, dutyRecylcuration);
+            ledcWrite(Recylcuration_PWM_PIN, dutyRecylcuration);
             Serial.print("Новый коэффициент заполнения рециркуляции: ");
             Serial.println(dutyRecylcuration);
             break;
@@ -272,11 +318,10 @@ void setup() {
     pinMode(relayPin, OUTPUT);
 
     ledcAttach(FAN_PWM_PIN, 40000, 10);
-
-    // ledcAttach(Recylcuration_PWM_PIN, 40000, 10);
-
     ledcWrite(FAN_PWM_PIN, dutyFan);
-    analogWrite(Recylcuration_PWM_PIN, dutyRecylcuration);
+
+    ledcAttach(Recylcuration_PWM_PIN, 40000, 10);
+    ledcWrite(Recylcuration_PWM_PIN, dutyRecylcuration);
 
     lv_init();
     lv_tick_set_cb(my_tick);
