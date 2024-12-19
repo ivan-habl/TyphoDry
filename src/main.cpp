@@ -23,19 +23,17 @@
 
 #define ONE_WIRE_BUS 26 // GPIO для подключения шины данных DS18B20
 
-const byte debounce = 0;
-
-unsigned long previousMillisLVGLwork = 0;
-const long intervalLVGLwork = 10;
-
-unsigned long previousMillisPIDprint = 0;
-const long intervalPIDprint = 100;
-
-unsigned long previousMillisMQTT = 0;
-const long intervalMQTT = 10;
-
 const char ssid[] = "I love pussy";
 const char pass[] = "*Cbufhtnf#";
+
+unsigned long previousMillisLVGLwork = 0;
+const unsigned long intervalLVGLwork = 10;
+
+unsigned long previousMillisPIDprint = 0;
+const unsigned long intervalPIDprint = 500;
+
+unsigned long previousMillisMQTT = 0;
+const unsigned long intervalMQTT = 10;
 
 // Флаги состояния
 bool isWiFiConnected = false;
@@ -49,6 +47,27 @@ unsigned long lastClientCheck = 0;
 const unsigned long wifiCheckInterval = 1000;
 const unsigned long clientCheckInterval = 1000;
 
+unsigned long lastMillis = 0;
+
+const byte FAN_PWM_PIN = 12;
+const byte relayPin = 13;
+const byte Recylcuration_PWM_PIN = 27;
+
+const unsigned long windowSize = 2000;
+unsigned long windowStartTime, nextSwitchTime;
+boolean relayStatus = false;
+
+float Input, Output, Setpoint = 25, Kp = 8.5, Ki = 0.052, Kd = 0.2;
+int dutyFan = 512, dutyRecylcuration = 1023;
+
+QuickPID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd,
+               QuickPID::pMode::pOnError,
+               QuickPID::dMode::dOnMeas,
+               QuickPID::iAwMode::iAwClamp,
+               QuickPID::Action::direct);
+
+Adafruit_SHT4x sht4 = Adafruit_SHT4x();
+
 WiFiClient net;
 MQTTClient client;
 OneWire oneWire(ONE_WIRE_BUS);
@@ -56,29 +75,6 @@ DallasTemperature sensors(&oneWire);
 
 DeviceAddress sensorAddresses[4];
 const int sensorCount = 4; // Количество датчиков
-
-unsigned long lastMillis = 0;
-
-// void connect() {
-//     Serial.print("checking wifi...");
-//     while (WiFi.status() != WL_CONNECTED) {
-//         Serial.print(".");
-//         delay(1000);
-//     }
-
-//     Serial.print("\nconnecting...");
-//     while (!client.connect("arduino", "public", "public")) {
-//         Serial.print(".");
-//         delay(1000);
-//     }
-
-//     Serial.println("\nconnected!");
-
-//     client.subscribe("Drier/Transmit/SHT40/Temperature");
-//     client.subscribe("Drier/Transmit/SHT40/Humidity");
-//     client.subscribe("Drier/Transmit/Signals/Discrete/PowerSt");
-//     client.subscribe("Drier/Transmit/Signals/Discrete/PIDSt");
-// }
 
 void connect() {
     if (!isWiFiConnected) {
@@ -101,7 +97,7 @@ void connect() {
             if (client.connect("arduino", "public", "public")) {
                 isClientConnected = true;
                 Serial.println("\nClient connected!");
-                
+
                 // Подписываемся на топики
                 client.subscribe("Drier/Transmit/SHT40/Temperature");
                 client.subscribe("Drier/Transmit/SHT40/Humidity");
@@ -169,25 +165,6 @@ void my_touchpad_read(lv_indev_t *indev, lv_indev_data_t *data) {
 static uint32_t my_tick(void) {
     return millis();
 }
-
-const byte FAN_PWM_PIN = 12;
-const byte relayPin = 13;
-const byte Recylcuration_PWM_PIN = 27;
-
-const unsigned long windowSize = 2000;
-float Input, Output, Setpoint = 25, Kp = 8.583, Ki = 0.038, Kd = 0.15;
-int dutyFan = 512, dutyRecylcuration = 1023;
-
-unsigned long windowStartTime, nextSwitchTime;
-boolean relayStatus = false;
-
-QuickPID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd,
-               QuickPID::pMode::pOnError,
-               QuickPID::dMode::dOnMeas,
-               QuickPID::iAwMode::iAwClamp,
-               QuickPID::Action::direct);
-
-Adafruit_SHT4x sht4 = Adafruit_SHT4x();
 
 void checkUserInput() {
     if (Serial.available()) {
@@ -353,6 +330,16 @@ void setup() {
 }
 
 void loop() {
+    if (millis() - previousMillisMQTT >= intervalMQTT) {
+        previousMillisMQTT = millis();
+        client.loop(); // Обработка MQTT-сообщений
+    }
+
+    // Проверка подключения и неблокирующее подключение
+    if (!isWiFiConnected || !isClientConnected) {
+        connect(); // Неблокирующая функция
+    }
+
     sensors_event_t humidity, temp;
     sht4.getEvent(&humidity, &temp);
 
@@ -367,29 +354,23 @@ void loop() {
 
     if (!relayStatus && Output > (millis() - windowStartTime)) {
         if (millis() > nextSwitchTime) {
-            nextSwitchTime = millis() + debounce;
+            nextSwitchTime = millis();
             relayStatus = true;
             digitalWrite(relayPin, HIGH);
             set_var_solid_relay_st(255);
             client.publish("Drier/Transmit/Discrete/PIDSt", "1");
+            Serial.print(">Heater: ");
+            Serial.println("1");
         }
     } else if (relayStatus && Output < (millis() - windowStartTime)) {
         if (millis() > nextSwitchTime) {
-            nextSwitchTime = millis() + debounce;
+            nextSwitchTime = millis();
             relayStatus = false;
             digitalWrite(relayPin, LOW);
             set_var_solid_relay_st(0);
             client.publish("Drier/Transmit/Discrete/PIDSt", "0");
-        }
-    }
-
-    if (millis() - previousMillisMQTT >= intervalMQTT) {
-        previousMillisMQTT = millis();
-
-        client.loop();
-
-        if (!client.connected()) {
-            connect();
+            Serial.print(">Heater: ");
+            Serial.println("0");
         }
     }
 
@@ -451,8 +432,8 @@ void loop() {
         Serial.println(Input);
         Serial.print(">Output: ");
         Serial.println(Output);
-        Serial.print(">Heater: ");
-        Serial.println(digitalRead(relayPin) ? "1" : "0");
+        // Serial.print(">Heater: ");
+        // Serial.println(digitalRead(relayPin) ? "1" : "0");
         Serial.print(">Kpt: ");
         Serial.println(myPID.GetPterm());
         Serial.print(">Kit: ");
