@@ -222,7 +222,7 @@ void create_screen_main() {
                     lv_obj_set_pos(obj, 59, 2);
                     lv_obj_set_size(obj, 65, 46);
                     lv_textarea_set_max_length(obj, 2);
-                    lv_textarea_set_placeholder_text(obj, "25");
+                    lv_textarea_set_placeholder_text(obj, "°C");
                     lv_textarea_set_one_line(obj, true);
                     lv_textarea_set_password_mode(obj, false);
                     lv_obj_add_event_cb(obj, event_handler_cb_main_temperature_setpoint, LV_EVENT_ALL, flowState);

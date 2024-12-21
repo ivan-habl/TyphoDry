@@ -1,9 +1,9 @@
-#include "FT6336U.h"
 #include "ui.h"
 #include "vars.h"
 #include <Adafruit_SHT4x.h>
 #include <Arduino.h>
 #include <DallasTemperature.h>
+#include <FT6336U.h>
 #include <MQTT.h>
 #include <OneWire.h>
 #include <QuickPID.h>
@@ -22,7 +22,7 @@
 #define TFT_ROTATION LV_DISPLAY_ROTATION_0
 
 /*LVGL draw into this buffer, 1/10 screen size usually works well. The size is in bytes*/
-#define DRAW_BUF_SIZE (TFT_HOR_RES * TFT_VER_RES / 20 * (LV_COLOR_DEPTH / 8))
+#define DRAW_BUF_SIZE (TFT_HOR_RES * TFT_VER_RES / 15 * (LV_COLOR_DEPTH / 8))
 
 #define ONE_WIRE_BUS 26 // GPIO для подключения шины данных DS18B20
 
@@ -35,7 +35,7 @@ extern unsigned long previousMillisLVGLwork;
 const unsigned long intervalLVGLwork = 10;
 
 extern unsigned long previousMillisPIDprint;
-const unsigned long intervalPIDprint = 500;
+const unsigned long intervalPIDprint = 100;
 
 extern unsigned long previousMillisMQTT;
 const unsigned long intervalMQTT = 10;
@@ -67,6 +67,8 @@ extern int dutyFan, dutyRecylcuration;
 
 const int sensorCount = 4; // Количество датчиков
 
+extern DeviceAddress sensorAddresses[4];
+
 extern QuickPID myPID;
 
 extern TFT_eSPI tft;
@@ -78,8 +80,6 @@ extern WiFiClient net;
 extern MQTTClient client;
 extern OneWire oneWire;
 extern DallasTemperature sensors;
-
-extern DeviceAddress sensorAddresses[4];
 
 void connect();
 void messageReceived(String &topic, String &payload);

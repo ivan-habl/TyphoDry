@@ -7,8 +7,8 @@ void checkUserInput() {
         switch (input) {
         case 's':
             Serial.println("Введите целевую температуру: ");
-            while (!Serial.available()) {
-            }
+            while (!Serial.available())
+                ;
             Setpoint = Serial.parseFloat();
             Serial.print("Новая целевая температура: ");
             Serial.println(Setpoint);
@@ -16,8 +16,8 @@ void checkUserInput() {
 
         case 'p':
             Serial.println("Введите p: ");
-            while (!Serial.available()) {
-            }
+            while (!Serial.available())
+                ;
             Kp = Serial.parseFloat();
             myPID.SetTunings(Kp, Ki, Kd);
             Serial.print("Новый p: ");
@@ -26,8 +26,8 @@ void checkUserInput() {
 
         case 'i':
             Serial.println("Введите i: ");
-            while (!Serial.available()) {
-            }
+            while (!Serial.available())
+                ;
             Ki = Serial.parseFloat();
             myPID.SetTunings(Kp, Ki, Kd);
             Serial.print("Новый i: ");
@@ -36,8 +36,8 @@ void checkUserInput() {
 
         case 'd':
             Serial.println("Введите d: ");
-            while (!Serial.available()) {
-            }
+            while (!Serial.available())
+                ;
             Kd = Serial.parseFloat();
             myPID.SetTunings(Kp, Ki, Kd);
             Serial.print("Новый d: ");
@@ -46,16 +46,16 @@ void checkUserInput() {
 
         case 'r':
             Serial.println("Введите y: ");
-            while (!Serial.available()) {
-            }
+            while (!Serial.available())
+                ;
             myPID.Reset();
             Serial.println("ПИД сброшен!");
             break;
 
         case 'e':
             Serial.println("Введите коэффициент заполнения: ");
-            while (!Serial.available()) {
-            }
+            while (!Serial.available())
+                ;
             dutyFan = Serial.parseInt();
             ledcWrite(FAN_PWM_PIN, dutyFan);
             Serial.print("Новый коэффициент заполнения: ");
@@ -64,8 +64,8 @@ void checkUserInput() {
 
         case 'f':
             Serial.println("Введите коэффициент заполнения рециркуляции: ");
-            while (!Serial.available()) {
-            }
+            while (!Serial.available())
+                ;
             dutyRecylcuration = Serial.parseInt();
             ledcWrite(Recylcuration_PWM_PIN, dutyRecylcuration);
             Serial.print("Новый коэффициент заполнения рециркуляции: ");
@@ -79,7 +79,7 @@ void checkUserInput() {
     }
 }
 
-// Вывод адреса датчика в сериал
+// Вывод адреса датчика в последовательный порт
 void printAddress(DeviceAddress deviceAddress) {
     for (uint8_t i = 0; i < 8; i++) {
         if (deviceAddress[i] < 16)
@@ -97,7 +97,7 @@ void setup() {
 
     connect();
 
-    sensors.begin(); // Запуск библиотеки
+    sensors.begin();
     // Поиск датчиков и сохранение их адресов
     int foundSensors = sensors.getDeviceCount();
     Serial.print("Обнаружено датчиков: ");
@@ -183,7 +183,6 @@ void loop() {
 
     if (get_var_drier_state() == 1 && myPID.Compute()) {
         windowStartTime = millis();
-        // Serial.println("ПИД, сработал,");
     }
 
     if (!relayStatus && Output > (millis() - windowStartTime)) {
@@ -192,9 +191,7 @@ void loop() {
             relayStatus = true;
             digitalWrite(relayPin, HIGH);
             set_var_solid_relay_st(255);
-            client.publish("Drier/Transmit/Discrete/PIDSt", "1");
-            Serial.print(">Heater: ");
-            Serial.println("1");
+            // client.publish("Drier/Transmit/Discrete/PIDSt", "1");
         }
     } else if (relayStatus && Output < (millis() - windowStartTime)) {
         if (millis() > nextSwitchTime) {
@@ -202,62 +199,62 @@ void loop() {
             relayStatus = false;
             digitalWrite(relayPin, LOW);
             set_var_solid_relay_st(0);
-            client.publish("Drier/Transmit/Discrete/PIDSt", "0");
-            Serial.print(">Heater: ");
-            Serial.println("0");
+            // client.publish("Drier/Transmit/Discrete/PIDSt", "1");
         }
     }
 
+    set_var_temperature(temp.temperature);
+    set_var_humidity(humidity.relative_humidity);
+    Setpoint = get_var_temperature_setpoint();
+
     if (millis() - previousMillisLVGLwork >= intervalLVGLwork) {
         previousMillisLVGLwork = millis();
-
-        set_var_temperature(temp.temperature);
-        set_var_humidity(humidity.relative_humidity);
-        Setpoint = get_var_temperature_setpoint();
-
         lv_timer_handler(); /* let the GUI do its work */
         ui_tick();
     }
-    char temperatureStr[10];
-    char humidityStr[10];
-    char powerStSrt[2];
-
-    dtostrf(temp.temperature, 2, 2, temperatureStr);
-    dtostrf(humidity.relative_humidity, 2, 2, humidityStr);
-    dtostrf(get_var_drier_state(), 1, 0, powerStSrt);
 
     if (millis() - lastMillis > 1000) {
         lastMillis = millis();
+
+        char temperatureStr[10];
+        char humidityStr[10];
+        char powerStSrt[2];
+        char relayStatusStr[2];
+
+        dtostrf(temp.temperature, 2, 2, temperatureStr);
+        dtostrf(humidity.relative_humidity, 2, 2, humidityStr);
+        dtostrf(get_var_drier_state(), 1, 0, powerStSrt);
+
         client.publish("Drier/Transmit/SHT40/Temperature", temperatureStr);
         client.publish("Drier/Transmit/SHT40/Humidity", humidityStr);
         client.publish("Drier/Transmit/Discrete/PowerSt", powerStSrt);
 
-        sensors.requestTemperatures(); // Запрос температуры со всех датчиков
-        // Serial.println("Температура датчиков:");
+        // sensors.requestTemperatures(); // Запрос температуры со всех датчиков
+        // // Serial.println("Температура датчиков:");
 
-        for (int i = 0; i < sensorCount; i++) {
-            if (sensors.validAddress(sensorAddresses[i])) {
-                float tempC = sensors.getTempC(sensorAddresses[i]);
-                char tempCStr[10];
-                dtostrf(tempC, 2, 2, tempCStr);
+        // for (int i = 0; i < sensorCount; i++) {
+        //     if (sensors.validAddress(sensorAddresses[i])) {
+        //         float tempC = sensors.getTempC(sensorAddresses[i]);
+        //         char tempCStr[10];
+        //         dtostrf(tempC, 2, 2, tempCStr);
 
-                // Формирование уникального топика для каждого сенсора
-                char topic[50];
-                snprintf(topic, sizeof(topic), "Drier/Transmit/Analog/Temperature/DS18B20n%d/", i + 1);
+        //         // Формирование уникального топика для каждого сенсора
+        //         char topic[50];
+        //         snprintf(topic, sizeof(topic), "Drier/Transmit/Analog/Temperature/DS18B20n%d/", i + 1);
 
-                client.publish(topic, tempCStr);
+        //         client.publish(topic, tempCStr);
 
-                // Serial.print("Датчик ");
-                // Serial.print(i + 1);
-                // Serial.print(": ");
-                // Serial.print(tempC);
-                // Serial.println(" °C");
-            } else {
-                Serial.print("Датчик ");
-                Serial.print(i + 1);
-                Serial.println(": Ошибка чтения.");
-            }
-        }
+        //         // Serial.print("Датчик ");
+        //         // Serial.print(i + 1);
+        //         // Serial.print(": ");
+        //         // Serial.print(tempC);
+        //         // Serial.println(" °C");
+        //     } else {
+        //         Serial.print("Датчик ");
+        //         Serial.print(i + 1);
+        //         Serial.println(": Ошибка чтения.");
+        //     }
+        // }
     }
 
     if (millis() - previousMillisPIDprint >= intervalPIDprint) {
@@ -266,8 +263,8 @@ void loop() {
         Serial.println(Input);
         Serial.print(">Output: ");
         Serial.println(Output);
-        // Serial.print(">Heater: ");
-        // Serial.println(digitalRead(relayPin) ? "1" : "0");
+        Serial.print(">Heater: ");
+        Serial.println(digitalRead(relayPin) ? "1" : "0");
         Serial.print(">Kpt: ");
         Serial.println(myPID.GetPterm());
         Serial.print(">Kit: ");
