@@ -163,7 +163,7 @@ void create_screen_main() {
         {
             lv_obj_t *obj = lv_obj_create(parent_obj);
             objects.obj5 = obj;
-            lv_obj_set_pos(obj, 233, 39);
+            lv_obj_set_pos(obj, 175, 34);
             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
             lv_obj_set_style_pad_left(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_obj_set_style_pad_bottom(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -178,7 +178,7 @@ void create_screen_main() {
                 {
                     lv_obj_t *obj = lv_btn_create(parent_obj);
                     objects.obj1 = obj;
-                    lv_obj_set_pos(obj, 0, 0);
+                    lv_obj_set_pos(obj, 0, 1);
                     lv_obj_set_size(obj, 56, 50);
                     lv_obj_add_event_cb(obj, event_handler_cb_main_obj1, LV_EVENT_ALL, flowState);
                     lv_obj_set_style_bg_color(obj, lv_color_hex(0xff0b96b5), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -198,7 +198,7 @@ void create_screen_main() {
                 {
                     lv_obj_t *obj = lv_btn_create(parent_obj);
                     objects.obj2 = obj;
-                    lv_obj_set_pos(obj, 126, -1);
+                    lv_obj_set_pos(obj, 126, 0);
                     lv_obj_set_size(obj, 56, 50);
                     lv_obj_add_event_cb(obj, event_handler_cb_main_obj2, LV_EVENT_ALL, flowState);
                     lv_obj_set_style_bg_color(obj, lv_color_hex(0xff0b96b5), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -219,7 +219,7 @@ void create_screen_main() {
                     // Temperature setpoint
                     lv_obj_t *obj = lv_textarea_create(parent_obj);
                     objects.temperature_setpoint = obj;
-                    lv_obj_set_pos(obj, 59, 2);
+                    lv_obj_set_pos(obj, 59, 3);
                     lv_obj_set_size(obj, 65, 46);
                     lv_textarea_set_max_length(obj, 2);
                     lv_textarea_set_placeholder_text(obj, "°C");
@@ -239,7 +239,7 @@ void create_screen_main() {
         {
             lv_obj_t *obj = lv_obj_create(parent_obj);
             objects.obj6 = obj;
-            lv_obj_set_pos(obj, 237, 0);
+            lv_obj_set_pos(obj, 179, 0);
             lv_obj_set_size(obj, 175, LV_SIZE_CONTENT);
             lv_obj_set_style_pad_top(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_obj_set_style_pad_bottom(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -262,7 +262,7 @@ void create_screen_main() {
         {
             lv_obj_t *obj = lv_obj_create(parent_obj);
             objects.obj7 = obj;
-            lv_obj_set_pos(obj, 187, 96);
+            lv_obj_set_pos(obj, 173, 87);
             lv_obj_set_size(obj, LV_SIZE_CONTENT, 65);
             lv_obj_set_style_pad_top(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_obj_set_style_pad_bottom(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -298,15 +298,15 @@ void create_screen_main() {
                             // Temperature
                             lv_obj_t *obj = lv_label_create(parent_obj);
                             objects.temperature = obj;
-                            lv_obj_set_pos(obj, 11, 0);
-                            lv_obj_set_size(obj, 66, LV_PCT(100));
+                            lv_obj_set_pos(obj, 0, 0);
+                            lv_obj_set_size(obj, 94, LV_PCT(100));
                             lv_label_set_text(obj, "");
                             lv_obj_set_style_text_font(obj, &ui_font_roboto_45, LV_PART_MAIN | LV_STATE_DEFAULT);
                             lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
                         }
                         {
                             lv_obj_t *obj = lv_label_create(parent_obj);
-                            lv_obj_set_pos(obj, 77, 16);
+                            lv_obj_set_pos(obj, 91, 16);
                             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
                             lv_label_set_text(obj, "°C");
                             lv_obj_set_style_text_font(obj, &ui_font_roboto_24, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -318,7 +318,7 @@ void create_screen_main() {
         {
             lv_obj_t *obj = lv_obj_create(parent_obj);
             objects.obj9 = obj;
-            lv_obj_set_pos(obj, 187, 157);
+            lv_obj_set_pos(obj, 173, 152);
             lv_obj_set_size(obj, LV_SIZE_CONTENT, 65);
             lv_obj_set_style_pad_top(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_obj_set_style_pad_bottom(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -354,8 +354,8 @@ void create_screen_main() {
                             // Humidity
                             lv_obj_t *obj = lv_label_create(parent_obj);
                             objects.humidity = obj;
-                            lv_obj_set_pos(obj, 11, 0);
-                            lv_obj_set_size(obj, 66, LV_PCT(100));
+                            lv_obj_set_pos(obj, 1, 0);
+                            lv_obj_set_size(obj, 94, LV_PCT(100));
                             lv_label_set_text(obj, "");
                             lv_obj_set_style_border_color(obj, lv_color_hex(0xff000000), LV_PART_MAIN | LV_STATE_DEFAULT);
                             lv_obj_set_style_text_font(obj, &ui_font_roboto_45, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -364,7 +364,7 @@ void create_screen_main() {
                         }
                         {
                             lv_obj_t *obj = lv_label_create(parent_obj);
-                            lv_obj_set_pos(obj, 84, 16);
+                            lv_obj_set_pos(obj, 98, 16);
                             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
                             lv_label_set_text(obj, "%");
                             lv_obj_set_style_text_font(obj, &ui_font_roboto_24, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -376,7 +376,7 @@ void create_screen_main() {
         {
             lv_obj_t *obj = lv_led_create(parent_obj);
             objects.obj3 = obj;
-            lv_obj_set_pos(obj, 411, 226);
+            lv_obj_set_pos(obj, 431, 28);
             lv_obj_set_size(obj, 32, 32);
             lv_led_set_color(obj, lv_color_hex(0xffff009c));
             lv_obj_add_event_cb(obj, event_handler_cb_main_obj3, LV_EVENT_ALL, flowState);
@@ -386,9 +386,9 @@ void create_screen_main() {
         {
             lv_obj_t *obj = lv_label_create(parent_obj);
             objects.obj11 = obj;
-            lv_obj_set_pos(obj, 267, 226);
+            lv_obj_set_pos(obj, 375, 29);
             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-            lv_label_set_text(obj, "Выход ПИД");
+            lv_label_set_text(obj, "ПИД");
             lv_obj_set_style_text_font(obj, &ui_font_roboto_24, LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_obj_set_style_text_color(obj, lv_color_hex(0xff064e5f), LV_PART_MAIN | LV_STATE_DEFAULT);
         }
@@ -404,9 +404,9 @@ void create_screen_main() {
         {
             lv_obj_t *obj = lv_label_create(parent_obj);
             objects.obj12 = obj;
-            lv_obj_set_pos(obj, 3, 184);
+            lv_obj_set_pos(obj, 34, 183);
             lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-            lv_label_set_text(obj, "До завершения:");
+            lv_label_set_text(obj, "Осталось:");
             lv_obj_set_style_text_font(obj, &ui_font_roboto_24, LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_obj_set_style_text_color(obj, lv_color_hex(0xff064e5f), LV_PART_MAIN | LV_STATE_DEFAULT);
         }
@@ -414,8 +414,8 @@ void create_screen_main() {
             // Stop
             lv_obj_t *obj = lv_btn_create(parent_obj);
             objects.stop = obj;
-            lv_obj_set_pos(obj, 350, 266);
-            lv_obj_set_size(obj, 127, 50);
+            lv_obj_set_pos(obj, 348, 264);
+            lv_obj_set_size(obj, 129, 50);
             lv_obj_add_event_cb(obj, event_handler_cb_main_stop, LV_EVENT_ALL, flowState);
             lv_obj_set_style_bg_color(obj, lv_color_hex(0xffb53607), LV_PART_MAIN | LV_STATE_DEFAULT);
             {
@@ -443,8 +443,8 @@ void create_screen_main() {
             // Start
             lv_obj_t *obj = lv_btn_create(parent_obj);
             objects.start = obj;
-            lv_obj_set_pos(obj, 350, 266);
-            lv_obj_set_size(obj, 127, 50);
+            lv_obj_set_pos(obj, 348, 264);
+            lv_obj_set_size(obj, 129, 50);
             lv_obj_add_event_cb(obj, event_handler_cb_main_start, LV_EVENT_ALL, flowState);
             lv_obj_set_style_bg_color(obj, lv_color_hex(0xff07b572), LV_PART_MAIN | LV_STATE_DEFAULT);
             {
@@ -472,7 +472,7 @@ void create_screen_main() {
             // Arc_timer
             lv_obj_t *obj = lv_arc_create(parent_obj);
             objects.arc_timer = obj;
-            lv_obj_set_pos(obj, 15, 15);
+            lv_obj_set_pos(obj, 13, 12);
             lv_obj_set_size(obj, 150, 150);
             lv_arc_set_range(obj, 0, 24);
             lv_arc_set_bg_start_angle(obj, 116);
@@ -491,7 +491,7 @@ void create_screen_main() {
                 {
                     lv_obj_t *obj = lv_label_create(parent_obj);
                     objects.obj18 = obj;
-                    lv_obj_set_pos(obj, 0, 48);
+                    lv_obj_set_pos(obj, -2, 45);
                     lv_obj_set_size(obj, LV_PCT(100), LV_SIZE_CONTENT);
                     lv_label_set_text(obj, "");
                     lv_obj_set_style_text_font(obj, &ui_font_roboto_45, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -503,7 +503,7 @@ void create_screen_main() {
             // Keyboard
             lv_obj_t *obj = lv_keyboard_create(parent_obj);
             objects.keyboard = obj;
-            lv_obj_set_pos(obj, 200, 91);
+            lv_obj_set_pos(obj, 137, 86);
             lv_obj_set_size(obj, 255, 228);
             lv_keyboard_set_mode(obj, LV_KEYBOARD_MODE_NUMBER);
             lv_obj_add_event_cb(obj, event_handler_cb_main_keyboard, LV_EVENT_ALL, flowState);

@@ -3,6 +3,7 @@
 unsigned long previousMillisLVGLwork = 0;
 unsigned long previousMillisPIDprint = 0;
 unsigned long previousMillisMQTT = 0;
+unsigned long previousMillisUIvar = 0;
 
 // Флаги состояния
 bool isWiFiConnected = false;

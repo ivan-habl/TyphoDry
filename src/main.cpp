@@ -170,10 +170,12 @@ void loop() {
     }
 
     // Проверка подключения и неблокирующее подключение
-    if (!isWiFiConnected || !isClientConnected) {
-        connect(); // Неблокирующая функция
-    }
+    // if (!isWiFiConnected || !isClientConnected) {
+    //     connect(); // Неблокирующая функция
+    // }
 
+    connect();
+    
     sensors_event_t humidity, temp;
     sht4.getEvent(&humidity, &temp);
 
@@ -191,7 +193,6 @@ void loop() {
             relayStatus = true;
             digitalWrite(relayPin, HIGH);
             set_var_solid_relay_st(255);
-            // client.publish("Drier/Transmit/Discrete/PIDSt", "1");
         }
     } else if (relayStatus && Output < (millis() - windowStartTime)) {
         if (millis() > nextSwitchTime) {
@@ -199,19 +200,22 @@ void loop() {
             relayStatus = false;
             digitalWrite(relayPin, LOW);
             set_var_solid_relay_st(0);
-            // client.publish("Drier/Transmit/Discrete/PIDSt", "1");
         }
     }
-
-    set_var_temperature(temp.temperature);
-    set_var_humidity(humidity.relative_humidity);
-    Setpoint = get_var_temperature_setpoint();
 
     if (millis() - previousMillisLVGLwork >= intervalLVGLwork) {
         previousMillisLVGLwork = millis();
         lv_timer_handler(); /* let the GUI do its work */
         ui_tick();
     }
+
+    if (millis() - previousMillisUIvar >= intervalUIvar) {
+        previousMillisUIvar = millis();
+        set_var_temperature(temp.temperature);
+        set_var_humidity(humidity.relative_humidity);
+    }
+
+    Setpoint = get_var_temperature_setpoint();
 
     if (millis() - lastMillis > 1000) {
         lastMillis = millis();

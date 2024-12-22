@@ -40,6 +40,9 @@ const unsigned long intervalPIDprint = 100;
 extern unsigned long previousMillisMQTT;
 const unsigned long intervalMQTT = 10;
 
+extern unsigned long previousMillisUIvar;
+const unsigned long intervalUIvar = 500;
+
 // Флаги состояния
 extern bool isWiFiConnected;
 extern bool isClientConnected;
