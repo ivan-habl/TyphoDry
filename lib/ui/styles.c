@@ -2,6 +2,7 @@
 #include "images.h"
 #include "fonts.h"
 
+#include "ui.h"
 #include "screens.h"
 
 //
@@ -23,10 +24,12 @@ lv_style_t *get_style_arc_timer_not_clickable_MAIN_DEFAULT() {
 };
 
 void add_style_arc_timer_not_clickable(lv_obj_t *obj) {
+    (void)obj;
     lv_obj_add_style(obj, get_style_arc_timer_not_clickable_MAIN_DEFAULT(), LV_PART_MAIN | LV_STATE_DEFAULT);
 };
 
 void remove_style_arc_timer_not_clickable(lv_obj_t *obj) {
+    (void)obj;
     lv_obj_remove_style(obj, get_style_arc_timer_not_clickable_MAIN_DEFAULT(), LV_PART_MAIN | LV_STATE_DEFAULT);
 };
 
