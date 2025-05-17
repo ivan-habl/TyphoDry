@@ -8,16 +8,18 @@ void my_print(lv_log_level_t level, const char *buf) {
 }
 #endif
 
-void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
-    uint32_t w = (area->x2 - area->x1 + 1);
-    uint32_t h = (area->y2 - area->y1 + 1);
+void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *data) {
+    uint32_t w = lv_area_get_width(area);
+    uint32_t h = lv_area_get_height(area);
+
+    lv_draw_sw_rgb565_swap(data, w * h);
 
     tft.startWrite();
     tft.setAddrWindow(area->x1, area->y1, w, h);
-    tft.pushColors((uint16_t *)px_map, w * h, true);
+    tft.pushPixels((uint16_t *)data, w * h);
     tft.endWrite();
 
-    lv_disp_flush_ready(disp);
+    lv_display_flush_ready(disp);
 }
 
 void my_touchpad_read(lv_indev_t *indev, lv_indev_data_t *data) {
