@@ -23,18 +23,26 @@ void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *data) {
 }
 
 void my_touchpad_read(lv_indev_t *indev, lv_indev_data_t *data) {
-    if (digitalRead(INT_N_PIN) != LOW) {
-        switch (ft6336u.read_touch1_event()) {
-        case 0x00:
-            data->state = LV_INDEV_STATE_RELEASED;
-            break;
-        case 0x02:
-            data->point.x = TFT_HOR_RES - ft6336u.read_touch1_y();
-            data->point.y = ft6336u.read_touch1_x();
-            Serial.printf("x:%d, y:%d\n", data->point.x, data->point.y);
-            data->state = LV_INDEV_STATE_PRESSED;
-            break;
-        }
+    // Проверяем наличие касания
+    if (digitalRead(INT_N_PIN) == LOW) {
+        // Нет касания
+        data->state = LV_INDEV_STATE_RELEASED;
+        data->point.x = 0;
+        data->point.y = 0;
+        return;
+    }
+
+    uint8_t event = ft6336u.read_touch1_event();
+    if (event == 0x02) { // Touch/Stream
+        // Landscape и оси поменяны местами, т.к. дисплей повернут
+        data->point.x = TFT_HOR_RES - ft6336u.read_touch1_y();
+        data->point.y = ft6336u.read_touch1_x();
+        data->state = LV_INDEV_STATE_PRESSED;
+        // Serial.printf("x:%d, y:%d\n", data->point.x, data->point.y);
+    } else {
+        data->state = LV_INDEV_STATE_RELEASED;
+        data->point.x = 0;
+        data->point.y = 0;
     }
 }
 
