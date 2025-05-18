@@ -135,7 +135,7 @@ void setup() {
     ledcWrite(Recylcuration_PWM_PIN, dutyRecylcuration);
 
     lv_init();
-    lv_tick_set_cb(my_tick);
+    lv_tick_set_cb(my_tick_get_cb);
 
     ft6336u.begin();
 
@@ -143,7 +143,7 @@ void setup() {
     lv_log_register_print_cb(my_print); /* register print function for debugging */
 #endif
 
-    tft.init();        /* TFT init */
+    tft.init();         /* TFT init */
     tft.setRotation(3); /* Landscape orientation, flipped */
 
     lv_display_t *disp = lv_tft_espi_create(TFT_HOR_RES, TFT_VER_RES, draw_buf, sizeof(draw_buf));

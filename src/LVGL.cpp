@@ -12,8 +12,6 @@ void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *data) {
     uint32_t w = lv_area_get_width(area);
     uint32_t h = lv_area_get_height(area);
 
-    // lv_draw_sw_rgb565_swap(data, w * h);
-
     tft.startWrite();
     tft.setAddrWindow(area->x1, area->y1, w, h);
     tft.pushPixels((uint16_t *)data, w * h);
@@ -45,6 +43,6 @@ void my_touchpad_read(lv_indev_t *indev, lv_indev_data_t *data) {
     }
 }
 
-uint32_t my_tick(void) {
+uint32_t my_tick_get_cb() {
     return millis();
 }

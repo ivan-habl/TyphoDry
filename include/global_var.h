@@ -22,7 +22,7 @@
 #define TFT_HOR_RES 320
 #define TFT_VER_RES 480
 
-#define DRAW_BUF_SIZE (TFT_HOR_RES * 10)
+#define DRAW_BUF_SIZE (TFT_HOR_RES * 25)
 
 extern lv_color_t draw_buf[DRAW_BUF_SIZE];
 
@@ -30,7 +30,7 @@ const char ssid[] = "I love pussy";
 const char pass[] = "*Cbufhtnf#";
 
 extern unsigned long previousMillisLVGLwork;
-const unsigned long intervalLVGLwork = 10;
+const unsigned long intervalLVGLwork = 5;
 
 extern unsigned long previousMillisPIDprint;
 const unsigned long intervalPIDprint = 100;
@@ -84,7 +84,7 @@ extern DallasTemperature sensors;
 
 void connect();
 void messageReceived(String &topic, String &payload);
-uint32_t my_tick(void);
+uint32_t my_tick_get_cb();
 void my_touchpad_read(lv_indev_t *indev, lv_indev_data_t *data);
 void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map);
 void my_print(lv_log_level_t level, const char *buf);
