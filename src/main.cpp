@@ -143,14 +143,11 @@ void setup() {
     lv_log_register_print_cb(my_print); /* register print function for debugging */
 #endif
 
-    tft.begin();        /* TFT init */
+    tft.init();        /* TFT init */
     tft.setRotation(3); /* Landscape orientation, flipped */
 
-    lv_display_t *disp;
-
-    disp = lv_display_create(TFT_HOR_RES, TFT_VER_RES);
-    lv_display_set_flush_cb(disp, my_disp_flush);
-    lv_display_set_buffers(disp, draw_buf, NULL, sizeof(draw_buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_t *disp = lv_tft_espi_create(TFT_HOR_RES, TFT_VER_RES, draw_buf, sizeof(draw_buf));
+    lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_270);
 
     lv_indev_t *indev = lv_indev_create();
     lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
@@ -175,7 +172,7 @@ void loop() {
     // }
 
     connect();
-    
+
     sensors_event_t humidity, temp;
     sht4.getEvent(&humidity, &temp);
 

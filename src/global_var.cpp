@@ -19,7 +19,7 @@ unsigned long windowStartTime, nextSwitchTime;
 float Input, Output, Setpoint = 25, Kp = 8.5, Ki = 0.052, Kd = 0.2;
 int dutyFan = 512, dutyRecylcuration = 1023;
 
-uint32_t draw_buf[DRAW_BUF_SIZE / 4];
+DRAM_ATTR lv_color_t draw_buf[DRAW_BUF_SIZE] __attribute__((aligned(32)));
 
 DeviceAddress sensorAddresses[4];
 

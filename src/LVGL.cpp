@@ -12,7 +12,7 @@ void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *data) {
     uint32_t w = lv_area_get_width(area);
     uint32_t h = lv_area_get_height(area);
 
-    lv_draw_sw_rgb565_swap(data, w * h);
+    // lv_draw_sw_rgb565_swap(data, w * h);
 
     tft.startWrite();
     tft.setAddrWindow(area->x1, area->y1, w, h);
@@ -34,9 +34,8 @@ void my_touchpad_read(lv_indev_t *indev, lv_indev_data_t *data) {
 
     uint8_t event = ft6336u.read_touch1_event();
     if (event == 0x02) { // Touch/Stream
-        // Landscape и оси поменяны местами, т.к. дисплей повернут
-        data->point.x = TFT_HOR_RES - ft6336u.read_touch1_y();
-        data->point.y = ft6336u.read_touch1_x();
+        data->point.x = TFT_HOR_RES - ft6336u.read_touch1_x();
+        data->point.y = TFT_VER_RES - ft6336u.read_touch1_y();
         data->state = LV_INDEV_STATE_PRESSED;
         // Serial.printf("x:%d, y:%d\n", data->point.x, data->point.y);
     } else {
