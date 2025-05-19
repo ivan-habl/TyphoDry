@@ -143,7 +143,7 @@ void setup() {
     lv_log_register_print_cb(my_print); /* register print function for debugging */
 #endif
 
-    tft.init();         /* TFT init */
+    tft.init();
     tft.setRotation(3); /* Landscape orientation, flipped */
 
     lv_display_t *disp = lv_tft_espi_create(TFT_HOR_RES, TFT_VER_RES, draw_buf, sizeof(draw_buf));
@@ -154,6 +154,8 @@ void setup() {
     lv_indev_set_read_cb(indev, my_touchpad_read);
 
     ui_init();
+
+    set_var_temperature_setpoint(Setpoint);
 
     myPID.SetOutputLimits(0, windowSize);
     myPID.SetSampleTimeUs(windowSize * 1000);

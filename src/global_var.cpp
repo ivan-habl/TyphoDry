@@ -16,8 +16,8 @@ unsigned long lastMillis = 0;
 
 unsigned long windowStartTime, nextSwitchTime;
 
-float Input, Output, Setpoint = 25, Kp = 8.5, Ki = 0.052, Kd = 0.2;
-int dutyFan = 512, dutyRecylcuration = 1023;
+float Input, Output, Setpoint = 25, Kp = 15.662, Ki = 0.052, Kd = 0.2;
+int dutyFan = 0, dutyRecylcuration = 1023;
 
 DRAM_ATTR lv_color_t draw_buf[DRAW_BUF_SIZE] __attribute__((aligned(32)));
 
