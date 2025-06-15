@@ -232,32 +232,32 @@ void loop() {
         client.publish("Drier/Transmit/SHT40/Humidity", humidityStr);
         client.publish("Drier/Transmit/Discrete/PowerSt", powerStSrt);
 
-        // sensors.requestTemperatures(); // Запрос температуры со всех датчиков
-        // // Serial.println("Температура датчиков:");
+        sensors.requestTemperatures(); // Запрос температуры со всех датчиков
+        // Serial.println("Температура датчиков:");
 
-        // for (int i = 0; i < sensorCount; i++) {
-        //     if (sensors.validAddress(sensorAddresses[i])) {
-        //         float tempC = sensors.getTempC(sensorAddresses[i]);
-        //         char tempCStr[10];
-        //         dtostrf(tempC, 2, 2, tempCStr);
+        for (int i = 0; i < sensorCount; i++) {
+            if (sensors.validAddress(sensorAddresses[i])) {
+                float tempC = sensors.getTempC(sensorAddresses[i]);
+                char tempCStr[10];
+                dtostrf(tempC, 2, 2, tempCStr);
 
-        //         // Формирование уникального топика для каждого сенсора
-        //         char topic[50];
-        //         snprintf(topic, sizeof(topic), "Drier/Transmit/Analog/Temperature/DS18B20n%d/", i + 1);
+                // Формирование уникального топика для каждого сенсора
+                char topic[50];
+                snprintf(topic, sizeof(topic), "Drier/Transmit/Analog/Temperature/DS18B20n%d/", i + 1);
 
-        //         client.publish(topic, tempCStr);
+                client.publish(topic, tempCStr);
 
-        //         // Serial.print("Датчик ");
-        //         // Serial.print(i + 1);
-        //         // Serial.print(": ");
-        //         // Serial.print(tempC);
-        //         // Serial.println(" °C");
-        //     } else {
-        //         Serial.print("Датчик ");
-        //         Serial.print(i + 1);
-        //         Serial.println(": Ошибка чтения.");
-        //     }
-        // }
+                // Serial.print("Датчик ");
+                // Serial.print(i + 1);
+                // Serial.print(": ");
+                // Serial.print(tempC);
+                // Serial.println(" °C");
+            } else {
+                Serial.print("Датчик ");
+                Serial.print(i + 1);
+                Serial.println(": Ошибка чтения.");
+            }
+        }
     }
 
     if (millis() - previousMillisPIDprint >= intervalPIDprint) {
