@@ -146,9 +146,19 @@ void setup() {
     tft.init();
     tft.setRotation(3); /* Landscape orientation, flipped */
 
-    lv_display_t *disp = lv_tft_espi_create(TFT_HOR_RES, TFT_VER_RES, draw_buf, sizeof(draw_buf));
+    // Создание дисплея для LVGL 9.3.0
+    disp = lv_display_create(TFT_HOR_RES, TFT_VER_RES);
+
+    // Установка функции flush
+    lv_display_set_flush_cb(disp, my_disp_flush);
+
+    // Установка буфера отрисовки
+    lv_display_set_buffers(disp, draw_buf, NULL, sizeof(draw_buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
+
+    // Установка поворота дисплея
     lv_display_set_rotation(disp, LV_DISPLAY_ROTATION_270);
 
+    // Создание устройства ввода (тачскрин)
     lv_indev_t *indev = lv_indev_create();
     lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(indev, my_touchpad_read);
