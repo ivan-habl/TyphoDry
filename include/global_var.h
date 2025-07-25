@@ -9,6 +9,7 @@
 #include <QuickPID.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
+#include <Temperature.h>
 #include <WiFi.h>
 #include <lvgl.h>
 
@@ -25,7 +26,7 @@
 #define DRAW_BUF_SIZE (TFT_HOR_RES * 25)
 
 extern lv_color_t draw_buf[DRAW_BUF_SIZE];
-extern lv_display_t * disp;
+extern lv_display_t *disp;
 
 const char ssid[] = "I love pussy";
 const char pass[] = "*Cbufhtnf#";

@@ -29,21 +29,21 @@ namespace gui {
 #endif
 void executeActionFunction(int actionId) {
 #if defined(EEZ_FOR_LVGL)
-    eez::flow::executeLvglActionHook(actionId - 1);
+	eez::flow::executeLvglActionHook(actionId - 1);
 #else
     g_actionExecFunctions[actionId]();
 #endif
 }
 #if EEZ_OPTION_GUI
-}
+} 
 #endif
-} // namespace eez
+} 
 // -----------------------------------------------------------------------------
 // core/alloc.cpp
 // -----------------------------------------------------------------------------
-#include <assert.h>
-#include <math.h>
 #include <stdio.h>
+#include <math.h>
+#include <assert.h>
 #include <string.h>
 namespace eez {
 #if defined(EEZ_FOR_LVGL)
@@ -66,20 +66,19 @@ void free(void *ptr) {
     lv_mem_free(ptr);
 #endif
 }
-template <typename T>
-void freeObject(T *ptr) {
-    ptr->~T();
+template<typename T> void freeObject(T *ptr) {
+	ptr->~T();
 #if LVGL_VERSION_MAJOR >= 9
     lv_free(ptr);
 #else
-    lv_mem_free(ptr);
+	lv_mem_free(ptr);
 #endif
 }
 void getAllocInfo(uint32_t &free, uint32_t &alloc) {
     lv_mem_monitor_t mon;
     lv_mem_monitor(&mon);
-    free = mon.free_size;
-    alloc = mon.total_size - mon.free_size;
+	free = mon.free_size;
+	alloc = mon.total_size - mon.free_size;
 }
 #elif defined(EEZ_DASHBOARD_API)
 #include <emscripten/heap.h>
@@ -91,23 +90,22 @@ void *alloc(size_t size, uint32_t id) {
 void free(void *ptr) {
     ::free(ptr);
 }
-template <typename T>
-void freeObject(T *ptr) {
-    ptr->~T();
-    ::free(ptr);
+template<typename T> void freeObject(T *ptr) {
+	ptr->~T();
+	::free(ptr);
 }
 void getAllocInfo(uint32_t &free, uint32_t &alloc) {
-    free = emscripten_get_heap_max() - emscripten_get_heap_size();
-    alloc = emscripten_get_heap_size();
+	free = emscripten_get_heap_max() - emscripten_get_heap_size();
+	alloc = emscripten_get_heap_size();
 }
 #else
 static const size_t ALIGNMENT = 64;
 static const size_t MIN_BLOCK_SIZE = 8;
 struct AllocBlock {
-    AllocBlock *next;
-    int free;
-    size_t size;
-    uint32_t id;
+	AllocBlock *next;
+	int free;
+	size_t size;
+	uint32_t id;
 };
 static uint8_t *g_heap;
 #if defined(EEZ_PLATFORM_STM32)
@@ -120,123 +118,122 @@ EEZ_MUTEX_DECLARE(alloc);
 #endif
 void initAllocHeap(uint8_t *heap, size_t heapSize) {
     g_heap = heap;
-    AllocBlock *first = (AllocBlock *)g_heap;
-    first->next = 0;
-    first->free = 1;
-    first->size = heapSize - sizeof(AllocBlock);
-    EEZ_MUTEX_CREATE(alloc);
+	AllocBlock *first = (AllocBlock *)g_heap;
+	first->next = 0;
+	first->free = 1;
+	first->size = heapSize - sizeof(AllocBlock);
+	EEZ_MUTEX_CREATE(alloc);
 }
 void *alloc(size_t size, uint32_t id) {
-    if (size == 0) {
-        return nullptr;
-    }
-    if (EEZ_MUTEX_WAIT(alloc, osWaitForever)) {
-        AllocBlock *firstBlock = (AllocBlock *)g_heap;
-        AllocBlock *block = firstBlock;
-        size = ((size + ALIGNMENT - 1) / ALIGNMENT) * ALIGNMENT;
-        while (block) {
-            if (block->free && block->size >= size) {
-                break;
-            }
-            block = block->next;
-        }
-        if (!block) {
-            EEZ_MUTEX_RELEASE(alloc);
-            return nullptr;
-        }
-        int remainingSize = block->size - size - sizeof(AllocBlock);
-        if (remainingSize >= (int)MIN_BLOCK_SIZE) {
-            auto newBlock = (AllocBlock *)((uint8_t *)block + sizeof(AllocBlock) + size);
-            newBlock->next = block->next;
-            newBlock->free = 1;
-            newBlock->size = remainingSize;
-            block->next = newBlock;
-            block->size = size;
-        }
-        block->free = 0;
-        block->id = id;
-        EEZ_MUTEX_RELEASE(alloc);
-        return block + 1;
-    }
-    return nullptr;
+	if (size == 0) {
+		return nullptr;
+	}
+	if (EEZ_MUTEX_WAIT(alloc, osWaitForever)) {
+		AllocBlock *firstBlock = (AllocBlock *)g_heap;
+		AllocBlock *block = firstBlock;
+		size = ((size + ALIGNMENT - 1) / ALIGNMENT) * ALIGNMENT;
+		while (block) {
+			if (block->free && block->size >= size) {
+				break;
+			}
+			block = block->next;
+		}
+		if (!block) {
+			EEZ_MUTEX_RELEASE(alloc);
+			return nullptr;
+		}
+		int remainingSize = block->size - size - sizeof(AllocBlock);
+		if (remainingSize >= (int)MIN_BLOCK_SIZE) {
+			auto newBlock = (AllocBlock *)((uint8_t *)block + sizeof(AllocBlock) + size);
+			newBlock->next = block->next;
+			newBlock->free = 1;
+			newBlock->size = remainingSize;
+			block->next = newBlock;
+			block->size = size;
+		}
+		block->free = 0;
+		block->id = id;
+		EEZ_MUTEX_RELEASE(alloc);
+		return block + 1;
+	}
+	return nullptr;
 }
 void free(void *ptr) {
-    if (ptr == 0) {
-        return;
-    }
-    if (EEZ_MUTEX_WAIT(alloc, osWaitForever)) {
-        AllocBlock *firstBlock = (AllocBlock *)g_heap;
-        AllocBlock *prevBlock = nullptr;
-        AllocBlock *block = firstBlock;
-        while (block && block + 1 < ptr) {
-            prevBlock = block;
-            block = block->next;
-        }
-        if (!block || block + 1 != ptr || block->free) {
-            assert(false);
-            EEZ_MUTEX_RELEASE(alloc);
-            return;
-        }
-        memset(ptr, 0xCC, block->size);
-        auto nextBlock = block->next;
-        if (nextBlock && nextBlock->free) {
-            if (prevBlock && prevBlock->free) {
-                prevBlock->next = nextBlock->next;
-                prevBlock->size += sizeof(AllocBlock) + block->size + sizeof(AllocBlock) + nextBlock->size;
-            } else {
-                block->next = nextBlock->next;
-                block->size += sizeof(AllocBlock) + nextBlock->size;
-                block->free = 1;
-            }
-        } else if (prevBlock && prevBlock->free) {
-            prevBlock->next = nextBlock;
-            prevBlock->size += sizeof(AllocBlock) + block->size;
-        } else {
-            block->free = 1;
-        }
-        EEZ_MUTEX_RELEASE(alloc);
-    }
+	if (ptr == 0) {
+		return;
+	}
+	if (EEZ_MUTEX_WAIT(alloc, osWaitForever)) {
+		AllocBlock *firstBlock = (AllocBlock *)g_heap;
+		AllocBlock *prevBlock = nullptr;
+		AllocBlock *block = firstBlock;
+		while (block && block + 1 < ptr) {
+			prevBlock = block;
+			block = block->next;
+		}
+		if (!block || block + 1 != ptr || block->free) {
+			assert(false);
+			EEZ_MUTEX_RELEASE(alloc);
+			return;
+		}
+		memset(ptr, 0xCC, block->size);
+		auto nextBlock = block->next;
+		if (nextBlock && nextBlock->free) {
+			if (prevBlock && prevBlock->free) {
+				prevBlock->next = nextBlock->next;
+				prevBlock->size += sizeof(AllocBlock) + block->size + sizeof(AllocBlock) + nextBlock->size;
+			} else {
+				block->next = nextBlock->next;
+				block->size += sizeof(AllocBlock) + nextBlock->size;
+				block->free = 1;
+			}
+		} else if (prevBlock && prevBlock->free) {
+			prevBlock->next = nextBlock;
+			prevBlock->size += sizeof(AllocBlock) + block->size;
+		} else {
+			block->free = 1;
+		}
+		EEZ_MUTEX_RELEASE(alloc);
+	}
 }
-template <typename T>
-void freeObject(T *ptr) {
-    ptr->~T();
-    free(ptr);
+template<typename T> void freeObject(T *ptr) {
+	ptr->~T();
+	free(ptr);
 }
 #if OPTION_SCPI
 void dumpAlloc(scpi_t *context) {
-    AllocBlock *first = (AllocBlock *)g_heap;
-    AllocBlock *block = first;
-    while (block) {
-        char buffer[100];
-        if (block->free) {
-            snprintf(buffer, sizeof(buffer), "FREE: %d", (int)block->size);
-        } else {
-            snprintf(buffer, sizeof(buffer), "ALOC (0x%08x): %d", (unsigned int)block->id, (int)block->size);
-        }
-        SCPI_ResultText(context, buffer);
-        block = block->next;
-    }
+	AllocBlock *first = (AllocBlock *)g_heap;
+	AllocBlock *block = first;
+	while (block) {
+		char buffer[100];
+		if (block->free) {
+			snprintf(buffer, sizeof(buffer), "FREE: %d", (int)block->size);
+		} else {
+			snprintf(buffer, sizeof(buffer), "ALOC (0x%08x): %d", (unsigned int)block->id, (int)block->size);
+		}
+		SCPI_ResultText(context, buffer);
+		block = block->next;
+	}
 }
 #endif
 void getAllocInfo(uint32_t &free, uint32_t &alloc) {
-    free = 0;
-    alloc = 0;
-    if (EEZ_MUTEX_WAIT(alloc, osWaitForever)) {
-        AllocBlock *first = (AllocBlock *)g_heap;
-        AllocBlock *block = first;
-        while (block) {
-            if (block->free) {
-                free += block->size;
-            } else {
-                alloc += block->size;
-            }
-            block = block->next;
-        }
-        EEZ_MUTEX_RELEASE(alloc);
-    }
+	free = 0;
+	alloc = 0;
+	if (EEZ_MUTEX_WAIT(alloc, osWaitForever)) {
+		AllocBlock *first = (AllocBlock *)g_heap;
+		AllocBlock *block = first;
+		while (block) {
+			if (block->free) {
+				free += block->size;
+			} else {
+				alloc += block->size;
+			}
+			block = block->next;
+		}
+		EEZ_MUTEX_RELEASE(alloc);
+	}
 }
 #endif
-} // namespace eez
+} 
 // -----------------------------------------------------------------------------
 // core/assets.cpp
 // -----------------------------------------------------------------------------
@@ -262,49 +259,50 @@ Assets *g_externalAssets;
 void fixOffsets(Assets *assets);
 bool decompressAssetsData(const uint8_t *assetsData, uint32_t assetsDataSize, Assets *decompressedAssets, uint32_t maxDecompressedAssetsSize, int *err) {
 #if EEZ_FOR_LVGL_LZ4_OPTION
-    uint32_t compressedDataOffset;
-    uint32_t decompressedSize;
-    auto header = (Header *)assetsData;
-    if (header->tag == HEADER_TAG_COMPRESSED) {
-        decompressedAssets->projectMajorVersion = header->projectMajorVersion;
-        decompressedAssets->projectMinorVersion = header->projectMinorVersion;
+	uint32_t compressedDataOffset;
+	uint32_t decompressedSize;
+	auto header = (Header *)assetsData;
+	if (header->tag == HEADER_TAG_COMPRESSED) {
+		decompressedAssets->projectMajorVersion = header->projectMajorVersion;
+		decompressedAssets->projectMinorVersion = header->projectMinorVersion;
         decompressedAssets->assetsType = header->assetsType;
-        compressedDataOffset = sizeof(Header);
-        decompressedSize = header->decompressedSize;
-    } else {
-        decompressedAssets->projectMajorVersion = PROJECT_VERSION_V2;
-        decompressedAssets->projectMinorVersion = 0;
+		compressedDataOffset = sizeof(Header);
+		decompressedSize = header->decompressedSize;
+	} else {
+		decompressedAssets->projectMajorVersion = PROJECT_VERSION_V2;
+		decompressedAssets->projectMinorVersion = 0;
         decompressedAssets->assetsType = ASSETS_TYPE_RESOURCE;
-        compressedDataOffset = 4;
-        decompressedSize = header->tag;
-    }
+		compressedDataOffset = 4;
+		decompressedSize = header->tag;
+	}
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 #endif
-    auto decompressedDataOffset = offsetof(Assets, settings);
+	auto decompressedDataOffset = offsetof(Assets, settings);
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
-    if (decompressedDataOffset + decompressedSize > maxDecompressedAssetsSize) {
-        if (err) {
-            *err = SCPI_ERROR_OUT_OF_DEVICE_MEMORY;
-        }
-        return false;
-    }
-    int compressedSize = assetsDataSize - compressedDataOffset;
+	if (decompressedDataOffset + decompressedSize > maxDecompressedAssetsSize) {
+		if (err) {
+			*err = SCPI_ERROR_OUT_OF_DEVICE_MEMORY;
+		}
+		return false;
+	}
+	int compressedSize = assetsDataSize - compressedDataOffset;
     int decompressResult = LZ4_decompress_safe(
-        (const char *)(assetsData + compressedDataOffset),
-        (char *)decompressedAssets + decompressedDataOffset,
-        compressedSize,
-        decompressedSize);
-    if (decompressResult != (int)decompressedSize) {
-        if (err) {
-            *err = SCPI_ERROR_INVALID_BLOCK_DATA;
-        }
-        return false;
-    }
-    return true;
+		(const char *)(assetsData + compressedDataOffset),
+		(char *)decompressedAssets + decompressedDataOffset,
+		compressedSize,
+		decompressedSize
+	);
+	if (decompressResult != (int)decompressedSize) {
+		if (err) {
+			*err = SCPI_ERROR_INVALID_BLOCK_DATA;
+		}
+		return false;
+	}
+	return true;
 #else
     EEZ_UNUSED(assetsData);
     EEZ_UNUSED(assetsDataSize);
@@ -320,12 +318,12 @@ static void allocMemoryForDecompressedAssets(const uint8_t *assetsData, uint32_t
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winvalid-offsetof"
 #endif
-    auto decompressedDataOffset = offsetof(Assets, settings);
+	auto decompressedDataOffset = offsetof(Assets, settings);
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
     auto header = (Header *)assetsData;
-    assert(header->tag == HEADER_TAG_COMPRESSED);
+    assert (header->tag == HEADER_TAG_COMPRESSED);
     uint32_t decompressedSize = header->decompressedSize;
     decompressedAssetsMemoryBufferSize = decompressedDataOffset + decompressedSize;
     decompressedAssetsMemoryBuffer = (uint8_t *)eez::alloc(decompressedAssetsMemoryBufferSize, 0x587da194);
@@ -350,82 +348,82 @@ void loadMainAssets(const uint8_t *assets, uint32_t assetsSize) {
     g_isMainAssetsLoaded = true;
 }
 void unloadExternalAssets() {
-    if (g_externalAssets) {
+	if (g_externalAssets) {
 #if EEZ_OPTION_GUI
-        removeExternalPagesFromTheStack();
+		removeExternalPagesFromTheStack();
 #endif
-        free(g_externalAssets);
-        g_externalAssets = nullptr;
-    }
+		free(g_externalAssets);
+		g_externalAssets = nullptr;
+	}
 }
 #if EEZ_OPTION_GUI
-const gui::PageAsset *getPageAsset(int pageId) {
-    if (pageId > 0) {
-        return g_mainAssets->pages[pageId - 1];
-    } else if (pageId < 0) {
-        if (g_externalAssets == nullptr) {
-            return nullptr;
-        }
-        return g_externalAssets->pages[-pageId - 1];
-    }
-    return nullptr;
+const gui::PageAsset* getPageAsset(int pageId) {
+	if (pageId > 0) {
+		return g_mainAssets->pages[pageId - 1];
+	} else if (pageId < 0) {
+		if (g_externalAssets == nullptr) {
+			return nullptr;
+		}
+		return g_externalAssets->pages[-pageId - 1];
+	}
+	return nullptr;
 }
-const gui::PageAsset *getPageAsset(int pageId, WidgetCursor &widgetCursor) {
-    if (pageId < 0) {
-        widgetCursor.assets = g_externalAssets;
-        widgetCursor.flowState = flow::getPageFlowState(g_externalAssets, -pageId - 1, widgetCursor);
-    } else {
-        widgetCursor.assets = g_mainAssets;
-        if (g_mainAssets->flowDefinition) {
-            widgetCursor.flowState = flow::getPageFlowState(g_mainAssets, pageId - 1, widgetCursor);
-        }
+const gui::PageAsset *getPageAsset(int pageId, WidgetCursor& widgetCursor) {
+	if (pageId < 0) {
+		widgetCursor.assets = g_externalAssets;
+		widgetCursor.flowState = flow::getPageFlowState(g_externalAssets, -pageId - 1, widgetCursor);
+	} else {
+	    widgetCursor.assets = g_mainAssets;
+		if (g_mainAssets->flowDefinition) {
+			widgetCursor.flowState = flow::getPageFlowState(g_mainAssets, pageId - 1, widgetCursor);
+		}
     }
-    return getPageAsset(pageId);
+	return getPageAsset(pageId);
 }
 const gui::Style *getStyle(int styleID) {
-    if (styleID > 0) {
-        return g_mainAssets->styles[styleID - 1];
-    } else if (styleID < 0) {
-        if (g_externalAssets == nullptr) {
-            return getStyle(STYLE_ID_DEFAULT);
-        }
-        return g_externalAssets->styles[-styleID - 1];
-    }
-    return getStyle(STYLE_ID_DEFAULT);
+	if (styleID > 0) {
+		return g_mainAssets->styles[styleID - 1];
+	} else if (styleID < 0) {
+		if (g_externalAssets == nullptr) {
+			return getStyle(STYLE_ID_DEFAULT);
+		}
+		return g_externalAssets->styles[-styleID - 1];
+	}
+	return getStyle(STYLE_ID_DEFAULT);
 }
 const gui::FontData *getFontData(int fontID) {
-    if (fontID > 0) {
-        return g_mainAssets->fonts[fontID - 1];
-    } else if (fontID < 0) {
-        if (g_externalAssets == nullptr) {
-            return nullptr;
-        }
-        return g_externalAssets->fonts[-fontID - 1];
-    }
-    return nullptr;
+	if (fontID > 0) {
+		return g_mainAssets->fonts[fontID - 1];
+	} else if (fontID < 0) {
+		if (g_externalAssets == nullptr) {
+			return nullptr;
+		}
+		return g_externalAssets->fonts[-fontID - 1];
+	}
+	return nullptr;
 }
 const gui::Bitmap *getBitmap(int bitmapID) {
-    if (bitmapID > 0) {
-        return g_mainAssets->bitmaps[bitmapID - 1];
-    } else if (bitmapID < 0) {
-        if (g_externalAssets == nullptr) {
-            return nullptr;
-        }
-        return g_externalAssets->bitmaps[-bitmapID - 1];
-    }
-    return nullptr;
+	if (bitmapID > 0) {
+		return g_mainAssets->bitmaps[bitmapID - 1];
+	} else if (bitmapID < 0) {
+		if (g_externalAssets == nullptr) {
+			return nullptr;
+		}
+		return g_externalAssets->bitmaps[-bitmapID - 1];
+	}
+	return nullptr;
 }
 const int getBitmapIdByName(const char *bitmapName) {
     for (uint32_t i = 0; i < g_mainAssets->bitmaps.count; i++) {
-        if (strcmp(g_mainAssets->bitmaps[i]->name, bitmapName) == 0) {
+		if (strcmp(g_mainAssets->bitmaps[i]->name, bitmapName) == 0) {
             return i + 1;
         }
-    }
+	}
     return 0;
 }
-#endif
+#endif 
 int getThemesCount() {
-    return (int)g_mainAssets->colorsDefinition->themes.count;
+	return (int)g_mainAssets->colorsDefinition->themes.count;
 }
 static Theme *getTheme(int i) {
     if (i < 0 || i >= (int)g_mainAssets->colorsDefinition->themes.count) {
@@ -436,58 +434,58 @@ static Theme *getTheme(int i) {
 const char *getThemeName(int i) {
     auto theme = getTheme(i);
     if (!theme) {
-        return "";
+	    return "";
     }
     return static_cast<const char *>(theme->name);
 }
 uint32_t getThemeColorsCount(int themeIndex) {
     auto theme = getTheme(themeIndex);
     if (!theme) {
-        return 0;
+	    return 0;
     }
-    return theme->colors.count;
+	return theme->colors.count;
 }
 const uint16_t *getThemeColors(int themeIndex) {
     auto theme = getTheme(themeIndex);
     if (!theme) {
-        static uint16_t *g_themeColors = {0};
-        return g_themeColors;
+        static uint16_t *g_themeColors = { 0 };
+	    return g_themeColors;
     }
-    return static_cast<uint16_t *>(theme->colors.items);
+	return static_cast<uint16_t *>(theme->colors.items);
 }
 const uint16_t *getColors() {
-    return static_cast<uint16_t *>(g_mainAssets->colorsDefinition->colors.items);
+	return static_cast<uint16_t *>(g_mainAssets->colorsDefinition->colors.items);
 }
 int getExternalAssetsMainPageId() {
-    return -1;
+	return -1;
 }
 #if EEZ_OPTION_GUI
 const char *getActionName(const WidgetCursor &widgetCursor, int16_t actionId) {
-    if (actionId == 0) {
-        return nullptr;
-    }
-    if (actionId < 0) {
-        actionId = -actionId;
-    }
-    actionId--;
-    if (!widgetCursor.assets) {
-        return "";
-    }
-    return widgetCursor.assets->actionNames[actionId];
+	if (actionId == 0) {
+		return nullptr;
+	}
+	if (actionId < 0) {
+		actionId = -actionId;
+	}
+	actionId--;
+	if (!widgetCursor.assets) {
+		return "";
+	}
+	return widgetCursor.assets->actionNames[actionId];
 }
 int16_t getDataIdFromName(const WidgetCursor &widgetCursor, const char *name) {
-    if (!widgetCursor.assets) {
-        return 0;
-    }
-    for (uint32_t i = 0; i < widgetCursor.assets->variableNames.count; i++) {
-        if (strcmp(widgetCursor.assets->variableNames[i], name) == 0) {
-            return -((int16_t)i + 1);
-        }
-    }
-    return 0;
+	if (!widgetCursor.assets) {
+		return 0;
+	}
+	for (uint32_t i = 0; i < widgetCursor.assets->variableNames.count; i++) {
+		if (strcmp(widgetCursor.assets->variableNames[i], name) == 0) {
+			return -((int16_t)i + 1);
+		}
+	}
+	return 0;
 }
-#endif
-} // namespace eez
+#endif 
+} 
 // -----------------------------------------------------------------------------
 // core/debug.cpp
 // -----------------------------------------------------------------------------
@@ -502,8 +500,8 @@ void Trace(TraceType traceType, const char *format, ...) {
     va_start(args, format);
     static const size_t BUFFER_SIZE = 256;
     char buffer[BUFFER_SIZE + 1];
-    vsnprintf(buffer, BUFFER_SIZE, format, args);
-    buffer[BUFFER_SIZE] = 0;
+	vsnprintf(buffer, BUFFER_SIZE, format, args);
+	buffer[BUFFER_SIZE] = 0;
     va_end(args);
     if (traceType == TRACE_TYPE_DEBUG) {
         pushDebugTraceHook(buffer, strlen(buffer));
@@ -513,32 +511,32 @@ void Trace(TraceType traceType, const char *format, ...) {
         pushErrorTraceHook(buffer, strlen(buffer));
     }
 }
-} // namespace debug
-} // namespace eez
+} 
+} 
 extern "C" void debug_trace(const char *str, size_t len) {
     eez::debug::pushDebugTraceHook(str, len);
 }
-#endif
+#endif 
 // -----------------------------------------------------------------------------
 // core/memory.cpp
 // -----------------------------------------------------------------------------
 #include <assert.h>
 namespace eez {
 #if (defined(EEZ_PLATFORM_SIMULATOR) || defined(__EMSCRIPTEN__)) && !defined(EEZ_FOR_LVGL) && !defined(EEZ_DASHBOARD_API)
-uint8_t g_memory[MEMORY_SIZE] = {0};
+uint8_t g_memory[MEMORY_SIZE] = { 0 };
 #endif
 uint8_t *DECOMPRESSED_ASSETS_START_ADDRESS;
 uint8_t *FLOW_TO_DEBUGGER_MESSAGE_BUFFER;
 #if EEZ_OPTION_GUI
-uint8_t *VRAM_BUFFER1_START_ADDRESS;
-uint8_t *VRAM_BUFFER2_START_ADDRESS;
-#if EEZ_OPTION_GUI_ANIMATIONS
-uint8_t *VRAM_ANIMATION_BUFFER1_START_ADDRESS;
-uint8_t *VRAM_ANIMATION_BUFFER2_START_ADDRESS;
-#endif
-uint8_t *VRAM_AUX_BUFFER_START_ADDRESSES[NUM_AUX_BUFFERS];
-uint8_t *SCREENSHOOT_BUFFER_START_ADDRESS;
-uint8_t *GUI_STATE_BUFFER;
+    uint8_t *VRAM_BUFFER1_START_ADDRESS;
+    uint8_t *VRAM_BUFFER2_START_ADDRESS;
+    #if EEZ_OPTION_GUI_ANIMATIONS
+        uint8_t *VRAM_ANIMATION_BUFFER1_START_ADDRESS;
+        uint8_t *VRAM_ANIMATION_BUFFER2_START_ADDRESS;
+    #endif
+    uint8_t *VRAM_AUX_BUFFER_START_ADDRESSES[NUM_AUX_BUFFERS];
+    uint8_t *SCREENSHOOT_BUFFER_START_ADDRESS;
+    uint8_t *GUI_STATE_BUFFER;
 #endif
 uint8_t *ALLOC_BUFFER = 0;
 uint32_t ALLOC_BUFFER_SIZE = 0;
@@ -601,7 +599,7 @@ uint8_t *allocBuffer(uint32_t size) {
     return buffer;
 #endif
 }
-} // namespace eez
+} 
 // -----------------------------------------------------------------------------
 // core/os.cpp
 // -----------------------------------------------------------------------------
@@ -623,13 +621,13 @@ uint8_t *allocBuffer(uint32_t size) {
 namespace eez {
 uint32_t millis() {
 #if defined(EEZ_PLATFORM_STM32)
-    return HAL_GetTick();
+	return HAL_GetTick();
 #elif defined(__EMSCRIPTEN__)
-    return (uint32_t)emscripten_get_now();
+	return (uint32_t)emscripten_get_now();
 #elif defined(EEZ_PLATFORM_SIMULATOR)
-    return osKernelGetTickCount();
+	return osKernelGetTickCount();
 #elif defined(EEZ_PLATFORM_ESP32)
-    return (unsigned long)(esp_timer_get_time() / 1000ULL);
+	return (unsigned long) (esp_timer_get_time() / 1000ULL);
 #elif defined(EEZ_PLATFORM_PICO)
     auto abs_time = get_absolute_time();
     return to_ms_since_boot(abs_time);
@@ -639,10 +637,10 @@ uint32_t millis() {
 #elif defined(EEZ_FOR_LVGL)
     return lv_tick_get();
 #else
-#error "Missing millis implementation";
+    #error "Missing millis implementation";
 #endif
 }
-} // namespace eez
+} 
 // -----------------------------------------------------------------------------
 // core/unit.cpp
 // -----------------------------------------------------------------------------
@@ -652,164 +650,164 @@ uint32_t millis() {
 #endif
 namespace eez {
 const char *g_unitNames[] = {
-    "",
-    "V",
-    "mV",
-    "A",
-    "mA",
-    "uA",
-    "W",
-    "mW",
-    "s",
-    "ms",
-    DEGREE_SYMBOL "C",
-    "rpm",
-    "\xb4",
-    "K\xb4",
-    "M\xb4",
-    "%",
-    "Hz",
-    "mHz",
-    "KHz",
-    "MHz",
-    "J",
-    "F",
-    "mF",
-    "uF",
-    "nF",
-    "pF",
-    "minutes",
-    "VA",
-    "VAR",
-    DEGREE_SYMBOL,
-    "Vpp",
-    "mVpp",
-    "App",
-    "mApp",
-    "uApp",
+    "", 
+    "V", 
+    "mV", 
+    "A", 
+    "mA", 
+    "uA", 
+    "W", 
+    "mW", 
+    "s", 
+    "ms", 
+    DEGREE_SYMBOL"C", 
+    "rpm", 
+    "\xb4", 
+    "K\xb4", 
+    "M\xb4", 
+    "%", 
+    "Hz", 
+    "mHz", 
+    "KHz", 
+    "MHz", 
+    "J", 
+    "F", 
+    "mF", 
+    "uF", 
+    "nF", 
+    "pF", 
+    "minutes", 
+    "VA", 
+    "VAR", 
+	DEGREE_SYMBOL, 
+	"Vpp", 
+	"mVpp", 
+	"App", 
+	"mApp", 
+	"uApp", 
 };
 const Unit g_baseUnit[] = {
-    UNIT_NONE,
-    UNIT_VOLT,
-    UNIT_VOLT,
-    UNIT_AMPER,
-    UNIT_AMPER,
-    UNIT_AMPER,
-    UNIT_WATT,
-    UNIT_WATT,
-    UNIT_SECOND,
-    UNIT_SECOND,
-    UNIT_CELSIUS,
-    UNIT_RPM,
-    UNIT_OHM,
-    UNIT_OHM,
-    UNIT_OHM,
-    UNIT_PERCENT,
-    UNIT_HERTZ,
-    UNIT_HERTZ,
-    UNIT_HERTZ,
-    UNIT_HERTZ,
-    UNIT_JOULE,
-    UNIT_FARAD,
-    UNIT_FARAD,
-    UNIT_FARAD,
-    UNIT_FARAD,
-    UNIT_FARAD,
-    UNIT_SECOND,
-    UNIT_VOLT_AMPERE,
-    UNIT_VOLT_AMPERE,
-    UNIT_DEGREE,
-    UNIT_VOLT_PP,
-    UNIT_VOLT_PP,
-    UNIT_AMPER_PP,
-    UNIT_AMPER_PP,
-    UNIT_AMPER_PP,
+	UNIT_NONE, 
+	UNIT_VOLT, 
+	UNIT_VOLT, 
+	UNIT_AMPER, 
+	UNIT_AMPER, 
+	UNIT_AMPER, 
+	UNIT_WATT, 
+	UNIT_WATT, 
+	UNIT_SECOND, 
+	UNIT_SECOND, 
+	UNIT_CELSIUS, 
+	UNIT_RPM, 
+	UNIT_OHM, 
+	UNIT_OHM, 
+	UNIT_OHM, 
+	UNIT_PERCENT, 
+	UNIT_HERTZ, 
+	UNIT_HERTZ, 
+	UNIT_HERTZ, 
+	UNIT_HERTZ, 
+	UNIT_JOULE, 
+	UNIT_FARAD, 
+	UNIT_FARAD, 
+	UNIT_FARAD, 
+	UNIT_FARAD, 
+	UNIT_FARAD, 
+	UNIT_SECOND, 
+	UNIT_VOLT_AMPERE, 
+	UNIT_VOLT_AMPERE, 
+	UNIT_DEGREE, 
+	UNIT_VOLT_PP, 
+	UNIT_VOLT_PP, 
+	UNIT_AMPER_PP, 
+	UNIT_AMPER_PP, 
+	UNIT_AMPER_PP, 
 };
 const float g_unitFactor[] = {
-    1.0f,
-    1.0f,
-    1E-3f,
-    1.0f,
-    1E-3f,
-    1E-6f,
-    1.0f,
-    1E-3f,
-    1.0f,
-    1E-3f,
-    1.0f,
-    1.0f,
-    1.0f,
-    1E3f,
-    1E6f,
-    1.0f,
-    1.0f,
-    1E-3f,
-    1E3f,
-    1E6f,
-    1.0f,
-    1.0f,
-    1E-3f,
-    1E-6f,
-    1E-9f,
-    1E-12f,
-    60.0f,
-    1.0f,
-    1.0f,
-    1.0f,
-    1.0f,
-    1E-3f,
-    1.0f,
-    1E-3f,
-    1E-6f,
+	1.0f, 
+	1.0f, 
+	1E-3f, 
+	1.0f, 
+	1E-3f, 
+	1E-6f, 
+	1.0f, 
+	1E-3f, 
+	1.0f, 
+	1E-3f, 
+	1.0f, 
+	1.0f, 
+	1.0f, 
+	1E3f, 
+	1E6f, 
+	1.0f, 
+	1.0f, 
+	1E-3f, 
+	1E3f, 
+	1E6f, 
+	1.0f, 
+	1.0f, 
+	1E-3f, 
+	1E-6f, 
+	1E-9f, 
+	1E-12f, 
+	60.0f, 
+	1.0f, 
+	1.0f, 
+	1.0f, 
+	1.0f, 
+	1E-3f, 
+	1.0f, 
+	1E-3f, 
+	1E-6f, 
 };
 #if OPTION_SCPI
 static const int g_scpiUnits[] = {
-    SCPI_UNIT_NONE,
-    SCPI_UNIT_VOLT,
-    SCPI_UNIT_VOLT,
-    SCPI_UNIT_AMPER,
-    SCPI_UNIT_AMPER,
-    SCPI_UNIT_AMPER,
-    SCPI_UNIT_WATT,
-    SCPI_UNIT_WATT,
-    SCPI_UNIT_SECOND,
-    SCPI_UNIT_SECOND,
-    SCPI_UNIT_CELSIUS,
-    SCPI_UNIT_NONE,
-    SCPI_UNIT_OHM,
-    SCPI_UNIT_OHM,
-    SCPI_UNIT_OHM,
-    SCPI_UNIT_NONE,
-    SCPI_UNIT_HERTZ,
-    SCPI_UNIT_HERTZ,
-    SCPI_UNIT_HERTZ,
-    SCPI_UNIT_HERTZ,
-    SCPI_UNIT_JOULE,
-    SCPI_UNIT_FARAD,
-    SCPI_UNIT_FARAD,
-    SCPI_UNIT_FARAD,
-    SCPI_UNIT_FARAD,
-    SCPI_UNIT_FARAD,
-    SCPI_UNIT_SECOND,
-    SCPI_UNIT_WATT,
-    SCPI_UNIT_WATT,
-    SCPI_UNIT_DEGREE,
-    SCPI_UNIT_VOLT,
-    SCPI_UNIT_VOLT,
-    SCPI_UNIT_AMPER,
-    SCPI_UNIT_AMPER,
-    SCPI_UNIT_AMPER,
+    SCPI_UNIT_NONE, 
+    SCPI_UNIT_VOLT, 
+    SCPI_UNIT_VOLT, 
+    SCPI_UNIT_AMPER, 
+    SCPI_UNIT_AMPER, 
+    SCPI_UNIT_AMPER, 
+    SCPI_UNIT_WATT, 
+    SCPI_UNIT_WATT, 
+    SCPI_UNIT_SECOND, 
+    SCPI_UNIT_SECOND, 
+    SCPI_UNIT_CELSIUS, 
+    SCPI_UNIT_NONE, 
+    SCPI_UNIT_OHM, 
+    SCPI_UNIT_OHM, 
+    SCPI_UNIT_OHM, 
+    SCPI_UNIT_NONE, 
+    SCPI_UNIT_HERTZ, 
+    SCPI_UNIT_HERTZ, 
+    SCPI_UNIT_HERTZ, 
+    SCPI_UNIT_HERTZ, 
+    SCPI_UNIT_JOULE, 
+    SCPI_UNIT_FARAD, 
+    SCPI_UNIT_FARAD, 
+    SCPI_UNIT_FARAD, 
+    SCPI_UNIT_FARAD, 
+    SCPI_UNIT_FARAD, 
+	SCPI_UNIT_SECOND, 
+	SCPI_UNIT_WATT, 
+	SCPI_UNIT_WATT, 
+	SCPI_UNIT_DEGREE, 
+	SCPI_UNIT_VOLT, 
+	SCPI_UNIT_VOLT, 
+	SCPI_UNIT_AMPER, 
+	SCPI_UNIT_AMPER, 
+	SCPI_UNIT_AMPER, 
 };
 #endif
 Unit getUnitFromName(const char *unitName) {
-    if (unitName) {
-        for (unsigned i = 0; i < sizeof(g_unitNames) / sizeof(const char *); i++) {
-            if (strcmp(g_unitNames[i], unitName) == 0) {
-                return (Unit)i;
-            }
-        }
-    }
-    return UNIT_NONE;
+	if (unitName) {
+		for (unsigned i = 0; i < sizeof(g_unitNames) / sizeof(const char *); i++) {
+			if (strcmp(g_unitNames[i], unitName) == 0) {
+				return (Unit)i;
+			}
+		}
+	}
+	return UNIT_NONE;
 }
 #if OPTION_SCPI
 int getScpiUnit(Unit unit) {
@@ -823,102 +821,102 @@ Unit getBaseUnit(Unit unit) {
     if (unit == UNIT_UNKNOWN) {
         return UNIT_UNKNOWN;
     }
-    return g_baseUnit[unit];
+	return g_baseUnit[unit];
 }
 float getUnitFactor(Unit unit) {
     if (unit == UNIT_UNKNOWN) {
         return 1.0f;
     }
-    return g_unitFactor[unit];
+	return g_unitFactor[unit];
 }
 static Unit getDerivedUnit(Unit unit, float factor) {
-    if (unit == UNIT_UNKNOWN) {
-        return UNIT_UNKNOWN;
-    }
-    for (size_t i = 0; i < sizeof(g_baseUnit) / sizeof(Unit); i++) {
-        if (g_baseUnit[i] == g_baseUnit[unit] && g_unitFactor[i] == factor) {
-            return (Unit)i;
-        }
-    }
-    return UNIT_UNKNOWN;
+	if (unit == UNIT_UNKNOWN) {
+		return UNIT_UNKNOWN;
+	}
+	for (size_t i = 0; i < sizeof(g_baseUnit) / sizeof(Unit); i++) {
+		if (g_baseUnit[i] == g_baseUnit[unit] && g_unitFactor[i] == factor) {
+			return (Unit)i;
+		}
+	}
+	return UNIT_UNKNOWN;
 }
-static const float FACTORS[] = {1E-12F, 1E-9F, 1E-6F, 1E-3F, 1E0F, 1E3F, 1E6F, 1E9F, 1E12F};
+static const float FACTORS[] = { 1E-12F, 1E-9F, 1E-6F, 1E-3F, 1E0F, 1E3F, 1E6F, 1E9F, 1E12F };
 Unit findDerivedUnit(float value, Unit unit) {
-    Unit result;
-    for (int factorIndex = 1;; factorIndex++) {
-        float factor = FACTORS[factorIndex];
-        if (factor > 1.0F) {
-            break;
-        }
-        if (value < factor) {
-            result = getDerivedUnit(unit, FACTORS[factorIndex - 1]);
-            if (result != UNIT_UNKNOWN) {
-                return result;
-            }
-        }
-    }
-    for (int factorIndex = sizeof(FACTORS) / sizeof(float) - 1; factorIndex >= 0; factorIndex--) {
-        float factor = FACTORS[factorIndex];
-        if (factor == 1.0F) {
-            break;
-        }
-        if (value >= factor) {
-            result = getDerivedUnit(unit, factor);
-            if (result != UNIT_UNKNOWN) {
-                return result;
-            }
-        }
-    }
-    return unit;
+	Unit result;
+	for (int factorIndex = 1; ; factorIndex++) {
+		float factor = FACTORS[factorIndex];
+		if (factor > 1.0F) {
+			break;
+		}
+		if (value < factor) {
+			result = getDerivedUnit(unit, FACTORS[factorIndex - 1]);
+			if (result != UNIT_UNKNOWN) {
+				return result;
+			}
+		}
+	}
+	for (int factorIndex = sizeof(FACTORS) / sizeof(float) - 1; factorIndex >= 0; factorIndex--) {
+		float factor = FACTORS[factorIndex];
+		if (factor == 1.0F) {
+			break;
+		}
+		if (value >= factor) {
+			result = getDerivedUnit(unit, factor);
+			if (result != UNIT_UNKNOWN) {
+				return result;
+			}
+		}
+	}
+	return unit;
 }
 static float getSmallerFactor(float factor) {
-    for (int factorIndex = sizeof(FACTORS) / sizeof(float) - 1; factorIndex > 0; factorIndex--) {
-        float itFactor = FACTORS[factorIndex];
-        if (itFactor < factor) {
-            return itFactor;
-        }
-    }
-    return FACTORS[0];
+	for (int factorIndex = sizeof(FACTORS) / sizeof(float) - 1; factorIndex > 0; factorIndex--) {
+		float itFactor = FACTORS[factorIndex];
+		if (itFactor < factor) {
+			return itFactor;
+		}
+	}
+	return FACTORS[0];
 }
 Unit getSmallerUnit(Unit unit, float min, float precision) {
-    float factor = getUnitFactor(unit);
-    if (precision <= factor || min <= factor) {
-        return getDerivedUnit(unit, getSmallerFactor(factor));
-    }
-    return UNIT_UNKNOWN;
+	float factor = getUnitFactor(unit);
+	if (precision <= factor || min <= factor) {
+		return getDerivedUnit(unit, getSmallerFactor(factor));
+	}
+	return UNIT_UNKNOWN;
 }
 Unit getBiggestUnit(Unit unit, float max) {
-    for (int factorIndex = sizeof(FACTORS) / sizeof(float) - 1; factorIndex >= 0; factorIndex--) {
-        float factor = FACTORS[factorIndex];
-        if (max >= factor) {
-            auto result = getDerivedUnit(unit, factor);
-            if (result != UNIT_UNKNOWN) {
-                return result;
-            }
-        }
-    }
-    return UNIT_UNKNOWN;
+	for (int factorIndex = sizeof(FACTORS) / sizeof(float) - 1; factorIndex >= 0; factorIndex--) {
+		float factor = FACTORS[factorIndex];
+		if (max >= factor) {
+			auto result = getDerivedUnit(unit, factor);
+			if (result != UNIT_UNKNOWN) {
+				return result;
+			}
+		}
+	}
+	return UNIT_UNKNOWN;
 }
 Unit getSmallestUnit(Unit unit, float min, float precision) {
-    for (int factorIndex = 0; factorIndex < int(sizeof(FACTORS) / sizeof(float)); factorIndex++) {
-        float factor = FACTORS[factorIndex];
-        if (precision <= factor || min <= factor) {
-            auto result = getDerivedUnit(unit, factor);
-            if (result != UNIT_UNKNOWN) {
-                return result;
-            }
-        }
-    }
-    return UNIT_UNKNOWN;
+	for (int factorIndex = 0; factorIndex < int(sizeof(FACTORS) / sizeof(float)); factorIndex++) {
+		float factor = FACTORS[factorIndex];
+		if (precision <= factor || min <= factor) {
+			auto result = getDerivedUnit(unit, factor);
+			if (result != UNIT_UNKNOWN) {
+				return result;
+			}
+		}
+	}
+	return UNIT_UNKNOWN;
 }
-} // namespace eez
+} 
 // -----------------------------------------------------------------------------
 // core/util.cpp
 // -----------------------------------------------------------------------------
 #define _USE_MATH_DEFINES
-#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 #if defined(EEZ_PLATFORM_STM32) && !defined(EEZ_FOR_LVGL)
 #include <crc.h>
@@ -941,7 +939,7 @@ float remapOutQuad(float x, float x1, float y1, float x2, float y2) {
 }
 float remapInOutQuad(float x, float x1, float y1, float x2, float y2) {
     float t = remap(x, x1, 0, x2, 1);
-    t = t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    t = t < .5 ? 2 * t*t : -1 + (4 - 2 * t)*t;
     x = remap(t, 0, x1, 1, x2);
     return remap(x, x1, y1, x2, y2);
 }
@@ -984,9 +982,9 @@ void stringCopy(char *dst, size_t maxStrLength, const char *src) {
     dst[maxStrLength - 1] = 0;
 }
 void stringCopyLength(char *dst, size_t maxStrLength, const char *src, size_t length) {
-    size_t n = MIN(length, maxStrLength);
-    strncpy(dst, src, n);
-    dst[n] = 0;
+	size_t n = MIN(length, maxStrLength);
+	strncpy(dst, src, n);
+	dst[n] = 0;
 }
 void stringAppendString(char *str, size_t maxStrLength, const char *value) {
     int n = maxStrLength - strlen(str) - 1;
@@ -1064,15 +1062,15 @@ void stringAppendLoad(char *str, size_t maxStrLength, float value) {
 }
 #if defined(EEZ_PLATFORM_STM32) && !defined(EEZ_FOR_LVGL)
 uint32_t crc32(const uint8_t *mem_block, size_t block_size) {
-    return HAL_CRC_Calculate(&hcrc, (uint32_t *)mem_block, block_size);
+	return HAL_CRC_Calculate(&hcrc, (uint32_t *)mem_block, block_size);
 }
 #else
 uint32_t crc32(const uint8_t *mem_block, size_t block_size) {
     uint32_t crc = 0xFFFFFFFF;
     for (size_t i = 0; i < block_size; ++i) {
-        uint32_t byte = mem_block[i];
+        uint32_t byte = mem_block[i]; 
         crc = crc ^ byte;
-        for (int j = 0; j < 8; ++j) {
+        for (int j = 0; j < 8; ++j) { 
             uint32_t mask = -((int32_t)crc & 1);
             crc = (crc >> 1) ^ (0xEDB88320 & mask);
         }
@@ -1257,8 +1255,8 @@ uint32_t getIpAddress(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
 }
 void ipAddressToString(uint32_t ipAddress, char *ipAddressStr, size_t maxIpAddressStrLength) {
     snprintf(ipAddressStr, maxIpAddressStrLength, "%d.%d.%d.%d",
-             getIpAddressPartA(ipAddress), getIpAddressPartB(ipAddress),
-             getIpAddressPartC(ipAddress), getIpAddressPartD(ipAddress));
+        getIpAddressPartA(ipAddress), getIpAddressPartB(ipAddress),
+        getIpAddressPartC(ipAddress), getIpAddressPartD(ipAddress));
 }
 void macAddressToString(const uint8_t *macAddress, char *macAddressStr) {
     for (int i = 0; i < 6; ++i) {
@@ -1427,7 +1425,7 @@ void formatBytes(uint64_t bytes, char *text, int count) {
         stringCopy(text, count, "0 Bytes");
     } else {
         double c = 1024.0;
-        const char *e[] = {"Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
+        const char *e[] = { "Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
         uint64_t f = (uint64_t)floor(log((double)bytes) / log(c));
         double g = round((bytes / pow(c, (double)f)) * 100) / 100;
         snprintf(text, count, "%g %s", g, e[f]);
@@ -1436,7 +1434,7 @@ void formatBytes(uint64_t bytes, char *text, int count) {
 void getFileName(const char *path, char *fileName, unsigned fileNameSize) {
     const char *a = strrchr(path, '/');
     if (a) {
-        a++;
+         a++;
     } else {
         a = path;
     }
@@ -1451,7 +1449,7 @@ void getFileName(const char *path, char *fileName, unsigned fileNameSize) {
 void getBaseFileName(const char *path, char *baseName, unsigned baseNameSize) {
     const char *a = strrchr(path, '/');
     if (a) {
-        a++;
+         a++;
     } else {
         a = path;
     }
@@ -1466,7 +1464,7 @@ void getBaseFileName(const char *path, char *baseName, unsigned baseNameSize) {
     }
     baseName[n] = 0;
 }
-} // namespace eez
+} 
 #if defined(M_PI)
 static const float PI_FLOAT = (float)M_PI;
 #else
@@ -1533,12 +1531,12 @@ extern "C" float eez_easeOutExpo(float x) {
 }
 extern "C" float eez_easeInOutExpo(float x) {
     return x == 0
-               ? 0
-           : x == 1
-               ? 1
-           : x < 0.5
-               ? powf(2, 20 * x - 10) / 2
-               : (2 - powf(2, -20 * x + 10)) / 2;
+        ? 0
+        : x == 1
+        ? 1
+        : x < 0.5
+        ? powf(2, 20 * x - 10) / 2
+        : (2 - powf(2, -20 * x + 10)) / 2;
 }
 extern "C" float eez_easeInCirc(float x) {
     return 1 - sqrtf(1 - powf(x, 2));
@@ -1548,8 +1546,8 @@ extern "C" float eez_easeOutCirc(float x) {
 }
 extern "C" float eez_easeInOutCirc(float x) {
     return x < 0.5
-               ? (1 - sqrtf(1 - pow(2 * x, 2))) / 2
-               : (sqrtf(1 - powf(-2 * x + 2, 2)) + 1) / 2;
+        ? (1 - sqrtf(1 - pow(2 * x, 2))) / 2
+        : (sqrtf(1 - powf(-2 * x + 2, 2)) + 1) / 2;
 }
 extern "C" float eez_easeInBack(float x) {
     return c3 * x * x * x - c1 * x * x;
@@ -1559,31 +1557,31 @@ extern "C" float eez_easeOutBack(float x) {
 }
 extern "C" float eez_easeInOutBack(float x) {
     return x < 0.5
-               ? (powf(2 * x, 2) * ((c2 + 1) * 2 * x - c2)) / 2
-               : (powf(2 * x - 2, 2) * ((c2 + 1) * (x * 2 - 2) + c2) + 2) / 2;
+        ? (powf(2 * x, 2) * ((c2 + 1) * 2 * x - c2)) / 2
+        : (powf(2 * x - 2, 2) * ((c2 + 1) * (x * 2 - 2) + c2) + 2) / 2;
 }
 extern "C" float eez_easeInElastic(float x) {
     return x == 0
-               ? 0
-           : x == 1
-               ? 1
-               : -powf(2, 10 * x - 10) * sinf((x * 10 - 10.75f) * c4);
+        ? 0
+        : x == 1
+        ? 1
+        : -powf(2, 10 * x - 10) * sinf((x * 10 - 10.75f) * c4);
 }
 extern "C" float eez_easeOutElastic(float x) {
     return x == 0
-               ? 0
-           : x == 1
-               ? 1
-               : powf(2, -10 * x) * sinf((x * 10 - 0.75f) * c4) + 1;
+        ? 0
+        : x == 1
+        ? 1
+        : powf(2, -10 * x) * sinf((x * 10 - 0.75f) * c4) + 1;
 }
 extern "C" float eez_easeInOutElastic(float x) {
     return x == 0
-               ? 0
-           : x == 1
-               ? 1
-           : x < 0.5
-               ? -(powf(2, 20 * x - 10) * sinf((20 * x - 11.125f) * c5)) / 2
-               : (powf(2, -20 * x + 10) * sinf((20 * x - 11.125f) * c5)) / 2 + 1;
+        ? 0
+        : x == 1
+        ? 1
+        : x < 0.5
+        ? -(powf(2, 20 * x - 10) * sinf((20 * x - 11.125f) * c5)) / 2
+        : (powf(2, -20 * x + 10) * sinf((20 * x - 11.125f) * c5)) / 2 + 1;
 }
 extern "C" float eez_easeOutBounce(float x);
 extern "C" float eez_easeInBounce(float x) {
@@ -1607,8 +1605,8 @@ extern "C" float eez_easeOutBounce(float x) {
 };
 extern "C" float eez_easeInOutBounce(float x) {
     return x < 0.5
-               ? (1 - eez_easeOutBounce(1 - 2 * x)) / 2
-               : (1 + eez_easeOutBounce(2 * x - 1)) / 2;
+        ? (1 - eez_easeOutBounce(1 - 2 * x)) / 2
+        : (1 + eez_easeOutBounce(2 * x - 1)) / 2;
 }
 namespace eez {
 EasingFuncType g_easingFuncs[] = {
@@ -1644,7 +1642,7 @@ EasingFuncType g_easingFuncs[] = {
     eez_easeOutBounce,
     eez_easeInOutBounce,
 };
-}
+} 
 #ifdef EEZ_PLATFORM_SIMULATOR_WIN32
 char *strnstr(const char *s1, const char *s2, size_t n) {
     char c = *s2;
@@ -1668,11 +1666,11 @@ char *strnstr(const char *s1, const char *s2, size_t n) {
 // -----------------------------------------------------------------------------
 // core/value.cpp
 // -----------------------------------------------------------------------------
-#include <ctype.h>
-#include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
+#include <ctype.h>
 #if defined(EEZ_DASHBOARD_API)
 #endif
 namespace eez {
@@ -1817,12 +1815,12 @@ static void FLOAT_value_to_text(const Value &value, char *text, int count) {
             floatValue /= getUnitFactor(unit);
         }
     } else {
-        floatValue = 0;
+        floatValue = 0; 
     }
     if (!isNaN(floatValue)) {
         if ((value.getOptions() & FLOAT_OPTIONS_LESS_THEN) != 0) {
             stringAppendString(text, count, "< ");
-            appendDotZero = false;
+			appendDotZero = false;
         }
         if (fixedDecimals) {
             stringAppendFloat(text, count, floatValue, FLOAT_OPTIONS_GET_NUM_FIXED_DECIMALS(options));
@@ -1896,12 +1894,12 @@ static void DOUBLE_value_to_text(const Value &value, char *text, int count) {
             doubleValue /= getUnitFactor(unit);
         }
     } else {
-        doubleValue = 0;
+        doubleValue = 0; 
     }
     if (!isNaN(doubleValue)) {
         if ((value.getOptions() & FLOAT_OPTIONS_LESS_THEN) != 0) {
             stringAppendString(text, count, "< ");
-            appendDotZero = false;
+			appendDotZero = false;
         }
         if (fixedDecimals) {
             stringAppendFloat(text, count, doubleValue, FLOAT_OPTIONS_GET_NUM_FIXED_DECIMALS(options));
@@ -2026,10 +2024,10 @@ static const char *ARRAY_REF_value_type_name(const Value &value) {
     return "array";
 }
 static bool compare_STRING_REF_value(const Value &a, const Value &b) {
-    return compare_STRING_value(a, b);
+	return compare_STRING_value(a, b);
 }
 static void STRING_REF_value_to_text(const Value &value, char *text, int count) {
-    STRING_value_to_text(value, text, count);
+	STRING_value_to_text(value, text, count);
 }
 static const char *STRING_REF_value_type_name(const Value &value) {
     EEZ_UNUSED(value);
@@ -2084,10 +2082,10 @@ static const char *JSON_value_type_name(const Value &value) {
     return "json";
 }
 static bool compare_JSON_MEMBER_VALUE_value(const Value &a, const Value &b) {
-    return a.getValue() == b.getValue();
+	return a.getValue() == b.getValue();
 }
 static void JSON_MEMBER_VALUE_value_to_text(const Value &value, char *text, int count) {
-    value.getValue().toText(text, count);
+	value.getValue().toText(text, count);
 }
 static const char *JSON_MEMBER_VALUE_value_type_name(const Value &value) {
     auto value2 = value.getValue();
@@ -2112,7 +2110,7 @@ static bool compare_PROPERTY_REF_value(const Value &a, const Value &b) {
 }
 static void PROPERTY_REF_value_to_text(const Value &value, char *text, int count) {
     snprintf(text, count, "property-ref (flowState=%p, component=%d, property=%d)",
-             (void *)value.getPropertyRef()->flowState, value.getPropertyRef()->componentIndex, value.getPropertyRef()->propertyIndex);
+        (void *)value.getPropertyRef()->flowState, value.getPropertyRef()->componentIndex, value.getPropertyRef()->propertyIndex);
 }
 static bool compare_DATE_value(const Value &a, const Value &b) {
     return a.type == b.type && a.doubleValue == b.doubleValue;
@@ -2125,7 +2123,7 @@ static const char *DATE_value_type_name(const Value &value) {
     return "date";
 }
 static bool compare_VERSIONED_STRING_value(const Value &a, const Value &b) {
-    return a.type == b.type && a.unit == b.unit;
+    return a.type == b.type && a.unit == b.unit; 
 }
 static void VERSIONED_STRING_value_to_text(const Value &value, char *text, int count) {
     const char *str = value.getString();
@@ -2140,34 +2138,34 @@ static const char *VERSIONED_STRING_value_type_name(const Value &value) {
     return "versioned-string";
 }
 static bool compare_VALUE_PTR_value(const Value &a, const Value &b) {
-    return a.type == b.type && (a.pValueValue == b.pValueValue || (a.pValueValue && b.pValueValue && *a.pValueValue == *b.pValueValue));
+	return a.type == b.type && (a.pValueValue == b.pValueValue || (a.pValueValue && b.pValueValue && *a.pValueValue == *b.pValueValue));
 }
 static void VALUE_PTR_value_to_text(const Value &value, char *text, int count) {
-    if (value.pValueValue) {
-        value.pValueValue->toText(text, count);
-    } else {
-        text[0] = 0;
-    }
+	if (value.pValueValue) {
+		value.pValueValue->toText(text, count);
+	} else {
+		text[0] = 0;
+	}
 }
 static const char *VALUE_PTR_value_type_name(const Value &value) {
-    if (value.pValueValue) {
-        return g_valueTypeNames[value.pValueValue->type](value.pValueValue);
-    } else {
-        return "null";
-    }
+	if (value.pValueValue) {
+		return g_valueTypeNames[value.pValueValue->type](value.pValueValue);
+	} else {
+		return "null";
+	}
 }
 static bool compare_ARRAY_ELEMENT_VALUE_value(const Value &a, const Value &b) {
-    return a.getValue() == b.getValue();
+	return a.getValue() == b.getValue();
 }
 static void ARRAY_ELEMENT_VALUE_value_to_text(const Value &value, char *text, int count) {
-    value.getValue().toText(text, count);
+	value.getValue().toText(text, count);
 }
 static const char *ARRAY_ELEMENT_VALUE_value_type_name(const Value &value) {
     auto value2 = value.getValue();
     return g_valueTypeNames[value2.type](value2);
 }
 static bool compare_FLOW_OUTPUT_value(const Value &a, const Value &b) {
-    return a.type == b.type && a.getUInt16() == b.getUInt16();
+	return a.type == b.type && a.getUInt16() == b.getUInt16();
 }
 static void FLOW_OUTPUT_value_to_text(const Value &value, char *text, int count) {
     EEZ_UNUSED(value);
@@ -2183,7 +2181,7 @@ using namespace gui;
 static bool compare_NATIVE_VARIABLE_value(const Value &a, const Value &b) {
     auto aValue = get(g_widgetCursor, a.getInt());
     auto bValue = get(g_widgetCursor, b.getInt());
-    return aValue == bValue;
+	return aValue == bValue;
 }
 static void NATIVE_VARIABLE_value_to_text(const Value &value, char *text, int count) {
     auto aValue = get(g_widgetCursor, value.getInt());
@@ -2212,7 +2210,7 @@ static const char *NATIVE_VARIABLE_value_type_name(const Value &value) {
 static bool compare_ERROR_value(const Value &a, const Value &b) {
     EEZ_UNUSED(a);
     EEZ_UNUSED(b);
-    return false;
+	return false;
 }
 static void ERROR_value_to_text(const Value &value, char *text, int count) {
     EEZ_UNUSED(value);
@@ -2284,7 +2282,7 @@ static const char *ENUM_value_type_name(const Value &value) {
     EEZ_UNUSED(value);
     return "internal";
 }
-#endif
+#endif 
 static bool compare_YT_DATA_GET_VALUE_FUNCTION_POINTER_value(const Value &a, const Value &b) {
     return a.type == b.type && a.getUInt32() == b.getUInt32();
 }
@@ -2322,21 +2320,24 @@ VALUE_TYPES
 #undef VALUE_TYPE
 #define VALUE_TYPE(NAME) compare_##NAME##_value,
 CompareValueFunction g_valueTypeCompareFunctions[] = {
-    VALUE_TYPES};
+	VALUE_TYPES
+};
 #undef VALUE_TYPE
 #define VALUE_TYPE(NAME) void NAME##_value_to_text(const Value &value, char *text, int count);
 VALUE_TYPES
 #undef VALUE_TYPE
 #define VALUE_TYPE(NAME) NAME##_value_to_text,
 ValueToTextFunction g_valueTypeToTextFunctions[] = {
-    VALUE_TYPES};
+	VALUE_TYPES
+};
 #undef VALUE_TYPE
-#define VALUE_TYPE(NAME) const char *NAME##_value_type_name(const Value &value);
+#define VALUE_TYPE(NAME) const char * NAME##_value_type_name(const Value &value);
 VALUE_TYPES
 #undef VALUE_TYPE
 #define VALUE_TYPE(NAME) NAME##_value_type_name,
 ValueTypeNameFunction g_valueTypeNames[] = {
-    VALUE_TYPES};
+	VALUE_TYPES
+};
 #undef VALUE_TYPE
 ArrayValueRef::~ArrayValueRef() {
     eez::flow::onArrayValueFree(&arrayValue);
@@ -2365,7 +2366,7 @@ bool assignValue(Value &dstValue, const Value &srcValue, uint32_t dstValueType) 
     } else if (srcValue.isJson()) {
         if (dstValueType == VALUE_TYPE_JSON) {
             dstValue = srcValue;
-        } else {
+        }  else {
             dstValue = flow::convertFromJson(srcValue.getInt(), dstValueType);
         }
 #endif
@@ -2405,14 +2406,14 @@ Value MakeEnumDefinitionValue(uint8_t enumValue, uint8_t enumDefinition) {
     return value;
 }
 const char *Value::getString() const {
-    auto value = getValue();
-    if (value.type == VALUE_TYPE_STRING_REF) {
-        return ((StringRef *)value.refValue)->str;
-    }
-    if (value.type == VALUE_TYPE_STRING) {
-        return value.strValue;
-    }
-    return nullptr;
+    auto value = getValue(); 
+	if (value.type == VALUE_TYPE_STRING_REF) {
+		return ((StringRef *)value.refValue)->str;
+	}
+	if (value.type == VALUE_TYPE_STRING) {
+		return value.strValue;
+	}
+	return nullptr;
 }
 const ArrayValue *Value::getArray() const {
     if (type == VALUE_TYPE_ARRAY) {
@@ -2433,278 +2434,278 @@ ArrayValue *Value::getArray() {
     return &((ArrayValueRef *)refValue)->arrayValue;
 }
 double Value::toDouble(int *err) const {
-    if (isIndirectValueType()) {
-        return getValue().toDouble(err);
-    }
-    if (err) {
-        *err = 0;
-    }
-    if (type == VALUE_TYPE_DOUBLE) {
-        return doubleValue;
-    }
-    if (type == VALUE_TYPE_FLOAT) {
-        return floatValue;
-    }
-    if (type == VALUE_TYPE_INT8) {
-        return int8Value;
-    }
-    if (type == VALUE_TYPE_UINT8) {
-        return uint8Value;
-    }
-    if (type == VALUE_TYPE_INT16) {
-        return int16Value;
-    }
-    if (type == VALUE_TYPE_UINT16) {
-        return uint16Value;
-    }
-    if (type == VALUE_TYPE_INT32 || type == VALUE_TYPE_BOOLEAN) {
-        return int32Value;
-    }
-    if (type == VALUE_TYPE_UINT32) {
-        return uint32Value;
-    }
-    if (type == VALUE_TYPE_INT64) {
-        return (double)int64Value;
-    }
-    if (type == VALUE_TYPE_UINT64) {
-        return (double)uint64Value;
-    }
-    if (type == VALUE_TYPE_DATE) {
-        return doubleValue;
-    }
-    if (isString()) {
+	if (isIndirectValueType()) {
+		return getValue().toDouble(err);
+	}
+	if (err) {
+		*err = 0;
+	}
+	if (type == VALUE_TYPE_DOUBLE) {
+		return doubleValue;
+	}
+	if (type == VALUE_TYPE_FLOAT) {
+		return floatValue;
+	}
+	if (type == VALUE_TYPE_INT8) {
+		return int8Value;
+	}
+	if (type == VALUE_TYPE_UINT8) {
+		return uint8Value;
+	}
+	if (type == VALUE_TYPE_INT16) {
+		return int16Value;
+	}
+	if (type == VALUE_TYPE_UINT16) {
+		return uint16Value;
+	}
+	if (type == VALUE_TYPE_INT32 || type == VALUE_TYPE_BOOLEAN) {
+		return int32Value;
+	}
+	if (type == VALUE_TYPE_UINT32) {
+		return uint32Value;
+	}
+	if (type == VALUE_TYPE_INT64) {
+		return (double)int64Value;
+	}
+	if (type == VALUE_TYPE_UINT64) {
+		return (double)uint64Value;
+	}
+	if (type == VALUE_TYPE_DATE) {
+		return doubleValue;
+	}
+	if (isString()) {
         const char *pStart = getString();
         char *pEnd;
-        double value = strtod(pStart, &pEnd);
+		double value = strtod(pStart, &pEnd);
         while (isspace(*pEnd)) {
             pEnd++;
         }
         if (*pEnd == '\0') {
             return value;
         }
-    }
+	}
     if (err) {
         *err = 1;
     }
-    return NAN;
+	return NAN;
 }
 float Value::toFloat(int *err) const {
-    if (isIndirectValueType()) {
-        return getValue().toFloat(err);
-    }
-    if (err) {
-        *err = 0;
-    }
-    if (type == VALUE_TYPE_DOUBLE) {
-        return (float)doubleValue;
-    }
-    if (type == VALUE_TYPE_FLOAT) {
-        return floatValue;
-    }
-    if (type == VALUE_TYPE_INT8) {
-        return int8Value;
-    }
-    if (type == VALUE_TYPE_UINT8) {
-        return uint8Value;
-    }
-    if (type == VALUE_TYPE_INT16) {
-        return int16Value;
-    }
-    if (type == VALUE_TYPE_UINT16) {
-        return uint16Value;
-    }
-    if (type == VALUE_TYPE_INT32 || type == VALUE_TYPE_BOOLEAN) {
-        return (float)int32Value;
-    }
-    if (type == VALUE_TYPE_UINT32) {
-        return (float)uint32Value;
-    }
-    if (type == VALUE_TYPE_INT64) {
-        return (float)int64Value;
-    }
-    if (type == VALUE_TYPE_UINT64) {
-        return (float)uint64Value;
-    }
-    if (isString()) {
+	if (isIndirectValueType()) {
+		return getValue().toFloat(err);
+	}
+	if (err) {
+		*err = 0;
+	}
+	if (type == VALUE_TYPE_DOUBLE) {
+		return (float)doubleValue;
+	}
+	if (type == VALUE_TYPE_FLOAT) {
+		return floatValue;
+	}
+	if (type == VALUE_TYPE_INT8) {
+		return int8Value;
+	}
+	if (type == VALUE_TYPE_UINT8) {
+		return uint8Value;
+	}
+	if (type == VALUE_TYPE_INT16) {
+		return int16Value;
+	}
+	if (type == VALUE_TYPE_UINT16) {
+		return uint16Value;
+	}
+	if (type == VALUE_TYPE_INT32 || type == VALUE_TYPE_BOOLEAN) {
+		return (float)int32Value;
+	}
+	if (type == VALUE_TYPE_UINT32) {
+		return (float)uint32Value;
+	}
+	if (type == VALUE_TYPE_INT64) {
+		return (float)int64Value;
+	}
+	if (type == VALUE_TYPE_UINT64) {
+		return (float)uint64Value;
+	}
+	if (isString()) {
         const char *pStart = getString();
         char *pEnd;
-        float value = strtof(pStart, &pEnd);
+		float value = strtof(pStart, &pEnd);
         while (isspace(*pEnd)) {
             pEnd++;
         }
         if (*pEnd == '\0') {
             return value;
         }
-    }
+	}
     if (err) {
         *err = 1;
     }
     return NAN;
 }
 int32_t Value::toInt32(int *err) const {
-    if (isIndirectValueType()) {
-        return getValue().toInt32(err);
-    }
-    if (err) {
-        *err = 0;
-    }
-    if (type == VALUE_TYPE_INT32 || type == VALUE_TYPE_BOOLEAN) {
-        return int32Value;
-    }
-    if (type == VALUE_TYPE_UINT32) {
-        return (int32_t)uint32Value;
-    }
-    if (type == VALUE_TYPE_INT8) {
-        return int8Value;
-    }
-    if (type == VALUE_TYPE_UINT8) {
-        return uint8Value;
-    }
-    if (type == VALUE_TYPE_INT16) {
-        return int16Value;
-    }
-    if (type == VALUE_TYPE_UINT16) {
-        return uint16Value;
-    }
-    if (type == VALUE_TYPE_INT64) {
-        return (int32_t)int64Value;
-    }
-    if (type == VALUE_TYPE_UINT64) {
-        return (int32_t)uint64Value;
-    }
-    if (type == VALUE_TYPE_VALUE_PTR) {
-        return pValueValue->toInt32(err);
-    }
-    if (type == VALUE_TYPE_DOUBLE) {
-        return (int32_t)doubleValue;
-    }
-    if (type == VALUE_TYPE_FLOAT) {
-        return (int32_t)floatValue;
-    }
-    if (isString()) {
+	if (isIndirectValueType()) {
+		return getValue().toInt32(err);
+	}
+	if (err) {
+		*err = 0;
+	}
+	if (type == VALUE_TYPE_INT32 || type == VALUE_TYPE_BOOLEAN) {
+		return int32Value;
+	}
+	if (type == VALUE_TYPE_UINT32) {
+		return (int32_t)uint32Value;
+	}
+	if (type == VALUE_TYPE_INT8) {
+		return int8Value;
+	}
+	if (type == VALUE_TYPE_UINT8) {
+		return uint8Value;
+	}
+	if (type == VALUE_TYPE_INT16) {
+		return int16Value;
+	}
+	if (type == VALUE_TYPE_UINT16) {
+		return uint16Value;
+	}
+	if (type == VALUE_TYPE_INT64) {
+		return (int32_t)int64Value;
+	}
+	if (type == VALUE_TYPE_UINT64) {
+		return (int32_t)uint64Value;
+	}
+	if (type == VALUE_TYPE_VALUE_PTR) {
+		return pValueValue->toInt32(err);
+	}
+	if (type == VALUE_TYPE_DOUBLE) {
+		return (int32_t)doubleValue;
+	}
+	if (type == VALUE_TYPE_FLOAT) {
+		return (int32_t)floatValue;
+	}
+	if (isString()) {
         const char *pStart = getString();
         char *pEnd;
-        int value = strtol(pStart, &pEnd, 10);
+		int value = strtol(pStart, &pEnd, 10);
         while (isspace(*pEnd)) {
             pEnd++;
         }
         if (*pEnd == '\0') {
             return value;
         }
-    }
+	}
     if (err) {
         *err = 1;
     }
-    return 0;
+	return 0;
 }
 int64_t Value::toInt64(int *err) const {
-    if (isIndirectValueType()) {
-        return getValue().toInt64(err);
-    }
-    if (err) {
-        *err = 0;
-    }
-    if (type == VALUE_TYPE_DOUBLE) {
-        return (int64_t)doubleValue;
-    }
-    if (type == VALUE_TYPE_FLOAT) {
-        return (int64_t)floatValue;
-    }
-    if (type == VALUE_TYPE_INT8) {
-        return int8Value;
-    }
-    if (type == VALUE_TYPE_UINT8) {
-        return uint8Value;
-    }
-    if (type == VALUE_TYPE_INT16) {
-        return int16Value;
-    }
-    if (type == VALUE_TYPE_UINT16) {
-        return uint16Value;
-    }
-    if (type == VALUE_TYPE_INT32 || type == VALUE_TYPE_BOOLEAN) {
-        return int32Value;
-    }
-    if (type == VALUE_TYPE_UINT32) {
-        return uint32Value;
-    }
-    if (type == VALUE_TYPE_INT64) {
-        return int64Value;
-    }
-    if (type == VALUE_TYPE_UINT64) {
-        return (int64_t)uint64Value;
-    }
-    if (isString()) {
+	if (isIndirectValueType()) {
+		return getValue().toInt64(err);
+	}
+	if (err) {
+		*err = 0;
+	}
+	if (type == VALUE_TYPE_DOUBLE) {
+		return (int64_t)doubleValue;
+	}
+	if (type == VALUE_TYPE_FLOAT) {
+		return (int64_t)floatValue;
+	}
+	if (type == VALUE_TYPE_INT8) {
+		return int8Value;
+	}
+	if (type == VALUE_TYPE_UINT8) {
+		return uint8Value;
+	}
+	if (type == VALUE_TYPE_INT16) {
+		return int16Value;
+	}
+	if (type == VALUE_TYPE_UINT16) {
+		return uint16Value;
+	}
+	if (type == VALUE_TYPE_INT32 || type == VALUE_TYPE_BOOLEAN) {
+		return int32Value;
+	}
+	if (type == VALUE_TYPE_UINT32) {
+		return uint32Value;
+	}
+	if (type == VALUE_TYPE_INT64) {
+		return int64Value;
+	}
+	if (type == VALUE_TYPE_UINT64) {
+		return (int64_t)uint64Value;
+	}
+	if (isString()) {
         const char *pStart = getString();
         char *pEnd;
-        int64_t value = strtol(pStart, &pEnd, 10);
+		int64_t value = strtol(pStart, &pEnd, 10);
         while (isspace(*pEnd)) {
             pEnd++;
         }
         if (*pEnd == '\0') {
             return value;
         }
-    }
+	}
     if (err) {
         *err = 1;
     }
-    return 0;
+	return 0;
 }
 bool Value::toBool(int *err) const {
-    if (isIndirectValueType()) {
-        return getValue().toBool(err);
-    }
+	if (isIndirectValueType()) {
+		return getValue().toBool(err);
+	}
     if (err) {
-        *err = 0;
-    }
-    if (type == VALUE_TYPE_UNDEFINED || type == VALUE_TYPE_NULL) {
-        return false;
-    }
-    if (type == VALUE_TYPE_DOUBLE) {
-        return doubleValue != 0;
-    }
-    if (type == VALUE_TYPE_FLOAT) {
-        return floatValue != 0;
-    }
-    if (type == VALUE_TYPE_INT8) {
-        return int8Value != 0;
-    }
-    if (type == VALUE_TYPE_UINT8) {
-        return uint8Value != 0;
-    }
-    if (type == VALUE_TYPE_INT16) {
-        return int16Value != 0;
-    }
-    if (type == VALUE_TYPE_UINT16) {
-        return uint16Value != 0;
-    }
-    if (type == VALUE_TYPE_INT32 || type == VALUE_TYPE_BOOLEAN) {
-        return int32Value != 0;
-    }
-    if (type == VALUE_TYPE_UINT32) {
-        return uint32Value != 0;
-    }
-    if (type == VALUE_TYPE_INT64) {
-        return int64Value != 0;
-    }
-    if (type == VALUE_TYPE_UINT64) {
-        return uint64Value != 0;
-    }
-    if (type == VALUE_TYPE_DATE) {
-        return doubleValue != 0;
-    }
-    if (isString()) {
-        const char *str = getString();
-        return str && *str;
-    }
-    if (isBlob()) {
-        auto blobRef = getBlob();
-        return blobRef->len > 0;
-    }
-    if (isArray()) {
-        auto array = getArray();
+		*err = 0;
+	}
+	if (type == VALUE_TYPE_UNDEFINED || type == VALUE_TYPE_NULL) {
+		return false;
+	}
+	if (type == VALUE_TYPE_DOUBLE) {
+		return doubleValue != 0;
+	}
+	if (type == VALUE_TYPE_FLOAT) {
+		return floatValue != 0;
+	}
+	if (type == VALUE_TYPE_INT8) {
+		return int8Value != 0;
+	}
+	if (type == VALUE_TYPE_UINT8) {
+		return uint8Value != 0;
+	}
+	if (type == VALUE_TYPE_INT16) {
+		return int16Value != 0;
+	}
+	if (type == VALUE_TYPE_UINT16) {
+		return uint16Value != 0;
+	}
+	if (type == VALUE_TYPE_INT32 || type == VALUE_TYPE_BOOLEAN) {
+		return int32Value != 0;
+	}
+	if (type == VALUE_TYPE_UINT32) {
+		return uint32Value != 0;
+	}
+	if (type == VALUE_TYPE_INT64) {
+		return int64Value != 0;
+	}
+	if (type == VALUE_TYPE_UINT64) {
+		return uint64Value != 0;
+	}
+	if (type == VALUE_TYPE_DATE) {
+		return doubleValue != 0;
+	}
+	if (isString()) {
+		const char *str = getString();
+		return str && *str;
+	}
+	if (isBlob()) {
+		auto blobRef = getBlob();
+		return blobRef->len > 0;
+	}
+	if (isArray()) {
+		auto array = getArray();
         return array->arraySize != 0;
-    }
+	}
     if (isJson()) {
         return int32Value != 0;
     }
@@ -2714,15 +2715,15 @@ bool Value::toBool(int *err) const {
     if (err) {
         *err = 1;
     }
-    return false;
+	return false;
 }
 Value Value::toString(uint32_t id) const {
-    if (isIndirectValueType()) {
-        return getValue().toString(id);
-    }
-    if (isString()) {
-        return *this;
-    }
+	if (isIndirectValueType()) {
+		return getValue().toString(id);
+	}
+	if (isString()) {
+		return *this;
+	}
     char tempStr[64];
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -2762,36 +2763,35 @@ Value Value::toString(uint32_t id) const {
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-    return makeStringRef(tempStr, strlen(tempStr), id);
+	return makeStringRef(tempStr, strlen(tempStr), id);
 }
 Value Value::makeStringRef(const char *str, int len, uint32_t id) {
     auto stringRef = ObjectAllocator<StringRef>::allocate(id);
-    if (stringRef == nullptr) {
-        return Value(0, VALUE_TYPE_NULL);
-    }
-    if (len == -1) {
-        len = strlen(str);
-    }
+	if (stringRef == nullptr) {
+		return Value(0, VALUE_TYPE_NULL);
+	}
+	if (len == -1) {
+		len = strlen(str);
+	}
     stringRef->str = (char *)alloc(len + 1, id + 1);
     if (stringRef->str == nullptr) {
         ObjectAllocator<StringRef>::deallocate(stringRef);
         return Value(0, VALUE_TYPE_NULL);
     }
     stringCopyLength(stringRef->str, len + 1, str, len);
-    stringRef->str[len] = 0;
+	stringRef->str[len] = 0;
     stringRef->refCounter = 1;
     Value value;
     value.type = VALUE_TYPE_STRING_REF;
     value.options = VALUE_OPTIONS_REF;
     value.refValue = stringRef;
-    return value;
+	return value;
 }
 Value Value::concatenateString(const Value &str1, const Value &str2) {
-    auto stringRef = ObjectAllocator<StringRef>::allocate(0xbab14c6a);
-    ;
-    if (stringRef == nullptr) {
-        return Value(0, VALUE_TYPE_NULL);
-    }
+    auto stringRef = ObjectAllocator<StringRef>::allocate(0xbab14c6a);;
+	if (stringRef == nullptr) {
+		return Value(0, VALUE_TYPE_NULL);
+	}
     auto newStrLen = strlen(str1.getString()) + strlen(str2.getString()) + 1;
     stringRef->str = (char *)alloc(newStrLen, 0xb5320162);
     if (stringRef->str == nullptr) {
@@ -2805,13 +2805,13 @@ Value Value::concatenateString(const Value &str1, const Value &str2) {
     value.type = VALUE_TYPE_STRING_REF;
     value.options = VALUE_OPTIONS_REF;
     value.refValue = stringRef;
-    return value;
+	return value;
 }
 Value Value::makeArrayRef(int arraySize, int arrayType, uint32_t id) {
     auto ptr = alloc(sizeof(ArrayValueRef) + (arraySize > 0 ? arraySize - 1 : 0) * sizeof(Value), id);
-    if (ptr == nullptr) {
-        return Value(0, VALUE_TYPE_NULL);
-    }
+	if (ptr == nullptr) {
+		return Value(0, VALUE_TYPE_NULL);
+	}
     ArrayValueRef *arrayRef = new (ptr) ArrayValueRef;
     arrayRef->arrayValue.arraySize = arraySize;
     arrayRef->arrayValue.arrayType = arrayType;
@@ -2823,13 +2823,13 @@ Value Value::makeArrayRef(int arraySize, int arrayType, uint32_t id) {
     value.type = VALUE_TYPE_ARRAY_REF;
     value.options = VALUE_OPTIONS_REF;
     value.refValue = arrayRef;
-    return value;
+	return value;
 }
 Value Value::makeArrayElementRef(Value arrayValue, int elementIndex, uint32_t id) {
     auto arrayElementValueRef = ObjectAllocator<ArrayElementValue>::allocate(id);
-    if (arrayElementValueRef == nullptr) {
-        return Value(0, VALUE_TYPE_NULL);
-    }
+	if (arrayElementValueRef == nullptr) {
+		return Value(0, VALUE_TYPE_NULL);
+	}
     arrayElementValueRef->arrayValue = arrayValue;
     arrayElementValueRef->elementIndex = elementIndex;
     arrayElementValueRef->refCounter = 1;
@@ -2837,13 +2837,13 @@ Value Value::makeArrayElementRef(Value arrayValue, int elementIndex, uint32_t id
     value.type = VALUE_TYPE_ARRAY_ELEMENT_VALUE;
     value.options = VALUE_OPTIONS_REF;
     value.refValue = arrayElementValueRef;
-    return value;
+	return value;
 }
 Value Value::makeJsonMemberRef(Value jsonValue, Value propertyName, uint32_t id) {
     auto jsonMemberValueRef = ObjectAllocator<JsonMemberValue>::allocate(id);
-    if (jsonMemberValueRef == nullptr) {
-        return Value(0, VALUE_TYPE_NULL);
-    }
+	if (jsonMemberValueRef == nullptr) {
+		return Value(0, VALUE_TYPE_NULL);
+	}
     jsonMemberValueRef->jsonValue = jsonValue;
     jsonMemberValueRef->propertyName = propertyName;
     jsonMemberValueRef->refCounter = 1;
@@ -2851,14 +2851,14 @@ Value Value::makeJsonMemberRef(Value jsonValue, Value propertyName, uint32_t id)
     value.type = VALUE_TYPE_JSON_MEMBER_VALUE;
     value.options = VALUE_OPTIONS_REF;
     value.refValue = jsonMemberValueRef;
-    return value;
+	return value;
 }
 Value Value::makeBlobRef(const uint8_t *blob, uint32_t len, uint32_t id) {
     auto blobRef = ObjectAllocator<BlobRef>::allocate(id);
-    if (blobRef == nullptr) {
-        return Value(0, VALUE_TYPE_NULL);
-    }
-    blobRef->blob = (uint8_t *)alloc(len, id + 1);
+	if (blobRef == nullptr) {
+		return Value(0, VALUE_TYPE_NULL);
+	}
+	blobRef->blob = (uint8_t *)alloc(len, id + 1);
     if (blobRef->blob == nullptr) {
         ObjectAllocator<BlobRef>::deallocate(blobRef);
         return Value(0, VALUE_TYPE_NULL);
@@ -2874,14 +2874,14 @@ Value Value::makeBlobRef(const uint8_t *blob, uint32_t len, uint32_t id) {
     value.type = VALUE_TYPE_BLOB_REF;
     value.options = VALUE_OPTIONS_REF;
     value.refValue = blobRef;
-    return value;
+	return value;
 }
 Value Value::makeBlobRef(const uint8_t *blob1, uint32_t len1, const uint8_t *blob2, uint32_t len2, uint32_t id) {
     auto blobRef = ObjectAllocator<BlobRef>::allocate(id);
-    if (blobRef == nullptr) {
-        return Value(0, VALUE_TYPE_NULL);
-    }
-    blobRef->blob = (uint8_t *)alloc(len1 + len2, id + 1);
+	if (blobRef == nullptr) {
+		return Value(0, VALUE_TYPE_NULL);
+	}
+	blobRef->blob = (uint8_t *)alloc(len1 + len2, id + 1);
     if (blobRef->blob == nullptr) {
         ObjectAllocator<BlobRef>::deallocate(blobRef);
         return Value(0, VALUE_TYPE_NULL);
@@ -2894,15 +2894,15 @@ Value Value::makeBlobRef(const uint8_t *blob1, uint32_t len1, const uint8_t *blo
     value.type = VALUE_TYPE_BLOB_REF;
     value.options = VALUE_OPTIONS_REF;
     value.refValue = blobRef;
-    return value;
+	return value;
 }
 #if defined(EEZ_FOR_LVGL)
 Value Value::makeLVGLEventRef(uint32_t code, void *currentTarget, void *target, int32_t userData, uint32_t key, int32_t gestureDir, int32_t rotaryDiff, uint32_t id) {
     auto lvglEventRef = ObjectAllocator<LVGLEventRef>::allocate(id);
-    if (lvglEventRef == nullptr) {
-        return Value(0, VALUE_TYPE_NULL);
-    }
-    lvglEventRef->code = code;
+	if (lvglEventRef == nullptr) {
+		return Value(0, VALUE_TYPE_NULL);
+	}
+	lvglEventRef->code = code;
     lvglEventRef->currentTarget = currentTarget;
     lvglEventRef->target = target;
     lvglEventRef->userData = userData;
@@ -2914,15 +2914,15 @@ Value Value::makeLVGLEventRef(uint32_t code, void *currentTarget, void *target, 
     value.type = VALUE_TYPE_EVENT;
     value.options = VALUE_OPTIONS_REF;
     value.refValue = lvglEventRef;
-    return value;
+	return value;
 }
 #endif
 Value Value::makePropertyRef(flow::FlowState *flowState, int componentIndex, int propertyIndex, uint32_t id) {
     auto propertyRef = ObjectAllocator<PropertyRef>::allocate(id);
-    if (propertyRef == nullptr) {
-        return Value(0, VALUE_TYPE_NULL);
-    }
-    propertyRef->flowState = flowState;
+	if (propertyRef == nullptr) {
+		return Value(0, VALUE_TYPE_NULL);
+	}
+	propertyRef->flowState = flowState;
     propertyRef->componentIndex = componentIndex;
     propertyRef->propertyIndex = propertyIndex;
     propertyRef->refCounter = 1;
@@ -2930,7 +2930,7 @@ Value Value::makePropertyRef(flow::FlowState *flowState, int componentIndex, int
     value.type = VALUE_TYPE_PROPERTY_REF;
     value.options = VALUE_OPTIONS_REF;
     value.refValue = propertyRef;
-    return value;
+	return value;
 }
 Value Value::evalProperty() const {
     auto propertyRef = getPropertyRef();
@@ -2982,7 +2982,7 @@ Value getVar(int16_t id) {
     }
     return Value();
 }
-void setVar(int16_t id, const Value &value) {
+void setVar(int16_t id, const Value& value) {
     auto native_var = native_vars[id];
     if (native_var.type == NATIVE_VAR_TYPE_INTEGER) {
         auto set = (void (*)(int32_t))native_var.set;
@@ -3005,14 +3005,14 @@ void setVar(int16_t id, const Value &value) {
         set(value.getString());
     }
 }
-#endif
-#endif
-} // namespace eez
+#endif 
+#endif 
+} 
 // -----------------------------------------------------------------------------
 // flow/components.cpp
 // -----------------------------------------------------------------------------
-#include <math.h>
 #include <stdio.h>
+#include <math.h>
 #if defined(EEZ_DASHBOARD_API)
 #endif
 namespace eez {
@@ -3069,103 +3069,103 @@ void executeLabelOutComponent(FlowState *flowState, unsigned componentIndex);
 void executeLVGLApiComponent(FlowState *flowState, unsigned componentIndex);
 typedef void (*ExecuteComponentFunctionType)(FlowState *flowState, unsigned componentIndex);
 static ExecuteComponentFunctionType g_executeComponentFunctions[] = {
-    executeStartComponent,
-    executeEndComponent,
-    executeInputComponent,
-    executeOutputComponent,
-    executeWatchVariableComponent,
-    executeEvalExprComponent,
-    executeSetVariableComponent,
-    executeSwitchComponent,
-    executeCompareComponent,
-    executeIsTrueComponent,
-    executeConstantComponent,
-    executeLogComponent,
-    executeCallActionComponent,
-    executeDelayComponent,
-    executeErrorComponent,
-    executeCatchErrorComponent,
-    executeCounterComponent,
-    executeLoopComponent,
-    executeShowPageComponent,
-    nullptr,
+	executeStartComponent,
+	executeEndComponent,
+	executeInputComponent,
+	executeOutputComponent,
+	executeWatchVariableComponent,
+	executeEvalExprComponent,
+	executeSetVariableComponent,
+	executeSwitchComponent,
+	executeCompareComponent,
+	executeIsTrueComponent,
+	executeConstantComponent,
+	executeLogComponent,
+	executeCallActionComponent,
+	executeDelayComponent,
+	executeErrorComponent,
+	executeCatchErrorComponent,
+	executeCounterComponent, 
+	executeLoopComponent,
+	executeShowPageComponent,
+	nullptr, 
 #if EEZ_OPTION_GUI
-    executeShowMessageBoxComponent,
-    executeShowKeyboardComponent,
-    executeShowKeypadComponent,
+	executeShowMessageBoxComponent,
+	executeShowKeyboardComponent,
+	executeShowKeypadComponent,
 #else
     nullptr,
     nullptr,
     nullptr,
 #endif
-    executeNoopComponent,
-    nullptr,
-    executeSelectLanguageComponent,
+	executeNoopComponent, 
+	nullptr, 
+    executeSelectLanguageComponent, 
 #if EEZ_OPTION_GUI
-    executeSetPageDirectionComponent,
+    executeSetPageDirectionComponent, 
 #else
     nullptr,
 #endif
-    executeAnimateComponent,
-    executeOnEventComponent,
-    executeLVGLComponent,
+    executeAnimateComponent, 
+    executeOnEventComponent, 
+    executeLVGLComponent, 
 #if EEZ_OPTION_GUI
-    executeOverrideStyleComponent,
+    executeOverrideStyleComponent, 
 #else
     nullptr,
 #endif
-    executeSortArrayComponent,
-    executeLVGLUserWidgetComponent,
-    executeTestAndSetComponent,
-    executeMQTTInitComponent,
-    executeMQTTConnectComponent,
-    executeMQTTDisconnectComponent,
-    executeMQTTEventComponent,
-    executeMQTTSubscribeComponent,
-    executeMQTTUnsubscribeComponent,
-    executeMQTTPublishComponent,
-    executeLabelInComponent,
-    executeLabelOutComponent,
-    executeLVGLApiComponent,
-    executeSetColorThemeComponent,
+    executeSortArrayComponent, 
+    executeLVGLUserWidgetComponent, 
+    executeTestAndSetComponent, 
+    executeMQTTInitComponent, 
+    executeMQTTConnectComponent, 
+    executeMQTTDisconnectComponent, 
+    executeMQTTEventComponent, 
+    executeMQTTSubscribeComponent, 
+    executeMQTTUnsubscribeComponent, 
+    executeMQTTPublishComponent, 
+    executeLabelInComponent, 
+    executeLabelOutComponent, 
+    executeLVGLApiComponent, 
+    executeSetColorThemeComponent,  
 };
 void registerComponent(ComponentTypes componentType, ExecuteComponentFunctionType executeComponentFunction) {
-    if (componentType >= defs_v3::COMPONENT_TYPE_START_ACTION) {
-        g_executeComponentFunctions[componentType - defs_v3::COMPONENT_TYPE_START_ACTION] = executeComponentFunction;
-    }
+	if (componentType >= defs_v3::COMPONENT_TYPE_START_ACTION) {
+		g_executeComponentFunctions[componentType - defs_v3::COMPONENT_TYPE_START_ACTION] = executeComponentFunction;
+	}
 }
 void executeComponent(FlowState *flowState, unsigned componentIndex) {
-    auto component = flowState->flow->components[componentIndex];
-    if (component->type >= defs_v3::FIRST_DASHBOARD_ACTION_COMPONENT_TYPE) {
+	auto component = flowState->flow->components[componentIndex];
+	if (component->type >= defs_v3::FIRST_DASHBOARD_ACTION_COMPONENT_TYPE) {
 #if defined(EEZ_DASHBOARD_API)
         executeDashboardComponent(component->type, getFlowStateIndex(flowState), componentIndex);
-#endif
+#endif 
         return;
     } else if (component->type >= defs_v3::COMPONENT_TYPE_START_ACTION) {
-        auto executeComponentFunction = g_executeComponentFunctions[component->type - defs_v3::COMPONENT_TYPE_START_ACTION];
-        if (executeComponentFunction != nullptr) {
-            executeComponentFunction(flowState, componentIndex);
-            return;
-        }
-    }
+		auto executeComponentFunction = g_executeComponentFunctions[component->type - defs_v3::COMPONENT_TYPE_START_ACTION];
+		if (executeComponentFunction != nullptr) {
+			executeComponentFunction(flowState, componentIndex);
+			return;
+		}
+	}
 #if EEZ_OPTION_GUI
     else if (component->type < 1000) {
-        if (component->type == defs_v3::COMPONENT_TYPE_USER_WIDGET_WIDGET) {
+		if (component->type == defs_v3::COMPONENT_TYPE_USER_WIDGET_WIDGET) {
             executeUserWidgetWidgetComponent(flowState, componentIndex);
         } else if (component->type == defs_v3::COMPONENT_TYPE_LINE_CHART_EMBEDDED_WIDGET) {
-            executeLineChartWidgetComponent(flowState, componentIndex);
-        } else if (component->type == defs_v3::COMPONENT_TYPE_ROLLER_WIDGET) {
-            executeRollerWidgetComponent(flowState, componentIndex);
-        }
-        return;
-    }
+			executeLineChartWidgetComponent(flowState, componentIndex);
+		} else if (component->type == defs_v3::COMPONENT_TYPE_ROLLER_WIDGET) {
+			executeRollerWidgetComponent(flowState, componentIndex);
+		}
+		return;
+	}
 #endif
-    char errorMessage[100];
-    snprintf(errorMessage, sizeof(errorMessage), "Unknown component at index = %d, type = %d\n", componentIndex, component->type);
-    throwError(flowState, componentIndex, errorMessage);
+	char errorMessage[100];
+	snprintf(errorMessage, sizeof(errorMessage), "Unknown component at index = %d, type = %d\n", componentIndex, component->type);
+	throwError(flowState, componentIndex, errorMessage);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/animate.cpp
 // -----------------------------------------------------------------------------
@@ -3185,8 +3185,8 @@ void executeAnimateComponent(FlowState *flowState, unsigned componentIndex) {
     while (timelineFlowState->isAction && timelineFlowState->parentFlowState) {
         timelineFlowState = timelineFlowState->parentFlowState;
     }
-    auto state = (AnimateComponenentExecutionState *)flowState->componenentExecutionStates[componentIndex];
-    if (!state) {
+	auto state = (AnimateComponenentExecutionState *)flowState->componenentExecutionStates[componentIndex];
+	if (!state) {
         Value fromValue;
         if (!evalProperty(flowState, componentIndex, defs_v3::ANIMATE_ACTION_COMPONENT_PROPERTY_FROM, fromValue, FlowError::Property("Animate", "From"))) {
             return;
@@ -3207,7 +3207,7 @@ void executeAnimateComponent(FlowState *flowState, unsigned componentIndex) {
             onFlowStateTimelineChanged(flowState);
             propagateValueThroughSeqout(flowState, componentIndex);
         } else {
-            state = allocateComponentExecutionState<AnimateComponenentExecutionState>(flowState, componentIndex);
+		    state = allocateComponentExecutionState<AnimateComponenentExecutionState>(flowState, componentIndex);
             state->startPosition = from;
             state->endPosition = to;
             state->speed = speed;
@@ -3241,8 +3241,8 @@ void executeAnimateComponent(FlowState *flowState, unsigned componentIndex) {
         }
     }
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/call_action.cpp
 // -----------------------------------------------------------------------------
@@ -3251,17 +3251,17 @@ namespace eez {
 namespace flow {
 FlowState *g_executeActionFlowState;
 unsigned g_executeActionComponentIndex;
-void executeCallAction(FlowState *flowState, unsigned componentIndex, int flowIndex, const Value &inputValue) {
-    if (flowIndex >= (int)flowState->flowDefinition->flows.count) {
+void executeCallAction(FlowState *flowState, unsigned componentIndex, int flowIndex, const Value& inputValue) {
+	if (flowIndex >= (int)flowState->flowDefinition->flows.count) {
         g_executeActionFlowState = flowState;
         g_executeActionComponentIndex = componentIndex;
-        executeActionFunction(flowIndex - flowState->flowDefinition->flows.count);
+		executeActionFunction(flowIndex - flowState->flowDefinition->flows.count);
         if ((int)componentIndex != -1 && !flowState->componenentAsyncStates[componentIndex]) {
-            propagateValueThroughSeqout(flowState, componentIndex);
+		    propagateValueThroughSeqout(flowState, componentIndex);
         }
-        return;
-    }
-    FlowState *actionFlowState = initActionFlowState(flowIndex, flowState, componentIndex, inputValue);
+		return;
+	}
+	FlowState *actionFlowState = initActionFlowState(flowIndex, flowState, componentIndex, inputValue);
     if ((int)componentIndex != -1) {
         for (uint32_t i = 0; i < actionFlowState->flow->userPropertiesAssignable.count; i++) {
             auto isAssignable = actionFlowState->flow->userPropertiesAssignable.items[i];
@@ -3283,44 +3283,44 @@ void executeCallAction(FlowState *flowState, unsigned componentIndex, int flowIn
             onValueChanged(propValuePtr);
         }
     }
-    if (canFreeFlowState(actionFlowState)) {
+	if (canFreeFlowState(actionFlowState)) {
         freeFlowState(actionFlowState);
         if ((int)componentIndex != -1) {
-            propagateValueThroughSeqout(flowState, componentIndex);
+		    propagateValueThroughSeqout(flowState, componentIndex);
         }
-    }
+	}
 }
 void executeCallActionComponent(FlowState *flowState, unsigned componentIndex) {
-    auto component = (CallActionActionComponent *)flowState->flow->components[componentIndex];
-    auto flowIndex = component->flowIndex;
-    if (flowIndex < 0) {
-        throwError(flowState, componentIndex, FlowError::Plain("Invalid action flow index in CallAction"));
-        return;
-    }
+	auto component = (CallActionActionComponent *)flowState->flow->components[componentIndex];
+	auto flowIndex = component->flowIndex;
+	if (flowIndex < 0) {
+		throwError(flowState, componentIndex, FlowError::Plain("Invalid action flow index in CallAction"));
+		return;
+	}
     executeCallAction(flowState, componentIndex, flowIndex, Value());
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/catch_error.cpp
 // -----------------------------------------------------------------------------
 namespace eez {
 namespace flow {
 void executeCatchErrorComponent(FlowState *flowState, unsigned componentIndex) {
-    auto catchErrorComponentExecutionState = (CatchErrorComponenentExecutionState *)flowState->componenentExecutionStates[componentIndex];
-    propagateValue(flowState, componentIndex, 1, catchErrorComponentExecutionState->message);
+	auto catchErrorComponentExecutionState = (CatchErrorComponenentExecutionState *)flowState->componenentExecutionStates[componentIndex];
+	propagateValue(flowState, componentIndex, 1, catchErrorComponentExecutionState->message);
     deallocateComponentExecutionState(flowState, componentIndex);
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/compare.cpp
 // -----------------------------------------------------------------------------
 namespace eez {
 namespace flow {
 struct CompareActionComponent : public Component {
-    uint8_t conditionInstructions[1];
+	uint8_t conditionInstructions[1];
 };
 void executeCompareComponent(FlowState *flowState, unsigned componentIndex) {
     auto component = (CompareActionComponent *)flowState->flow->components[componentIndex];
@@ -3340,26 +3340,26 @@ void executeCompareComponent(FlowState *flowState, unsigned componentIndex) {
         throwError(flowState, componentIndex, FlowError::PropertyConvert("Compare", "Condition", "boolean"));
         return;
     }
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/constant.cpp
 // -----------------------------------------------------------------------------
 namespace eez {
 namespace flow {
 struct ConstantActionComponent : public Component {
-    uint16_t valueIndex;
+	uint16_t valueIndex;
 };
 void executeConstantComponent(FlowState *flowState, unsigned componentIndex) {
-    auto component = (ConstantActionComponent *)flowState->flow->components[componentIndex];
-    auto &sourceValue = *flowState->flowDefinition->constants[component->valueIndex];
-    propagateValue(flowState, componentIndex, 1, sourceValue);
-    propagateValueThroughSeqout(flowState, componentIndex);
+	auto component = (ConstantActionComponent *)flowState->flow->components[componentIndex];
+	auto &sourceValue = *flowState->flowDefinition->constants[component->valueIndex];
+	propagateValue(flowState, componentIndex, 1, sourceValue);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/counter.cpp
 // -----------------------------------------------------------------------------
@@ -3386,47 +3386,47 @@ void executeCounterComponent(FlowState *flowState, unsigned componentIndex) {
         propagateValue(flowState, componentIndex, 1);
     }
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/delay.cpp
 // -----------------------------------------------------------------------------
 namespace eez {
 namespace flow {
 struct DelayComponenentExecutionState : public ComponenentExecutionState {
-    uint32_t waitUntil;
+	uint32_t waitUntil;
 };
 void executeDelayComponent(FlowState *flowState, unsigned componentIndex) {
-    auto delayComponentExecutionState = (DelayComponenentExecutionState *)flowState->componenentExecutionStates[componentIndex];
-    if (!delayComponentExecutionState) {
-        Value value;
-        if (!evalProperty(flowState, componentIndex, defs_v3::DELAY_ACTION_COMPONENT_PROPERTY_MILLISECONDS, value, FlowError::Property("Delay", "Milliseconds"))) {
-            return;
-        }
-        double milliseconds = value.toDouble();
-        if (!isNaN(milliseconds)) {
-            delayComponentExecutionState = allocateComponentExecutionState<DelayComponenentExecutionState>(flowState, componentIndex);
-            delayComponentExecutionState->waitUntil = millis() + (uint32_t)floor(milliseconds);
-        } else {
-            throwError(flowState, componentIndex, FlowError::PropertyInvalid("Delay", "Milliseconds"));
-            return;
-        }
-        if (!addToQueue(flowState, componentIndex, -1, -1, -1, true)) {
-            return;
-        }
-    } else {
-        if (millis() >= delayComponentExecutionState->waitUntil) {
-            deallocateComponentExecutionState(flowState, componentIndex);
-            propagateValueThroughSeqout(flowState, componentIndex);
-        } else {
-            if (!addToQueue(flowState, componentIndex, -1, -1, -1, true)) {
-                return;
-            }
-        }
-    }
+	auto delayComponentExecutionState = (DelayComponenentExecutionState *)flowState->componenentExecutionStates[componentIndex];
+	if (!delayComponentExecutionState) {
+		Value value;
+		if (!evalProperty(flowState, componentIndex, defs_v3::DELAY_ACTION_COMPONENT_PROPERTY_MILLISECONDS, value, FlowError::Property("Delay", "Milliseconds"))) {
+			return;
+		}
+		double milliseconds = value.toDouble();
+		if (!isNaN(milliseconds)) {
+			delayComponentExecutionState = allocateComponentExecutionState<DelayComponenentExecutionState>(flowState, componentIndex);
+			delayComponentExecutionState->waitUntil = millis() + (uint32_t)floor(milliseconds);
+		} else {
+			throwError(flowState, componentIndex, FlowError::PropertyInvalid("Delay", "Milliseconds"));
+			return;
+		}
+		if (!addToQueue(flowState, componentIndex, -1, -1, -1, true)) {
+			return;
+		}
+	} else {
+		if (millis() >= delayComponentExecutionState->waitUntil) {
+			deallocateComponentExecutionState(flowState, componentIndex);
+			propagateValueThroughSeqout(flowState, componentIndex);
+		} else {
+			if (!addToQueue(flowState, componentIndex, -1, -1, -1, true)) {
+				return;
+			}
+		}
+	}
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/end.cpp
 // -----------------------------------------------------------------------------
@@ -3434,45 +3434,45 @@ namespace eez {
 namespace flow {
 void executeEndComponent(FlowState *flowState, unsigned componentIndex) {
     EEZ_UNUSED(componentIndex);
-    if (flowState->parentFlowState && flowState->isAction) {
+	if (flowState->parentFlowState && flowState->isAction) {
         if (flowState->parentComponentIndex != -1) {
-            propagateValueThroughSeqout(flowState->parentFlowState, flowState->parentComponentIndex);
+		    propagateValueThroughSeqout(flowState->parentFlowState, flowState->parentComponentIndex);
         }
-    } else {
-        stopScriptHook();
-    }
+	} else {
+		stopScriptHook();
+	}
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/error.cpp
 // -----------------------------------------------------------------------------
 namespace eez {
 namespace flow {
 void executeErrorComponent(FlowState *flowState, unsigned componentIndex) {
-    Value expressionValue;
-    if (!evalProperty(flowState, componentIndex, defs_v3::EVAL_EXPR_ACTION_COMPONENT_PROPERTY_EXPRESSION, expressionValue, FlowError::Property("Error", "Message"))) {
-        return;
-    }
-    throwError(flowState, componentIndex, FlowError::Plain(expressionValue.getString()));
+	Value expressionValue;
+	if (!evalProperty(flowState, componentIndex, defs_v3::EVAL_EXPR_ACTION_COMPONENT_PROPERTY_EXPRESSION, expressionValue, FlowError::Property("Error", "Message"))) {
+		return;
+	}
+	throwError(flowState, componentIndex, FlowError::Plain(expressionValue.getString()));
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/expr_eval.cpp
 // -----------------------------------------------------------------------------
 namespace eez {
 namespace flow {
 void executeEvalExprComponent(FlowState *flowState, unsigned componentIndex) {
-    Value expressionValue;
-    if (!evalProperty(flowState, componentIndex, defs_v3::EVAL_EXPR_ACTION_COMPONENT_PROPERTY_EXPRESSION, expressionValue, FlowError::Property("Evalute", "Expression"))) {
-        return;
-    }
-    propagateValue(flowState, componentIndex, 1, expressionValue);
-    propagateValueThroughSeqout(flowState, componentIndex);
+	Value expressionValue;
+	if (!evalProperty(flowState, componentIndex, defs_v3::EVAL_EXPR_ACTION_COMPONENT_PROPERTY_EXPRESSION, expressionValue, FlowError::Property("Evalute", "Expression"))) {
+		return;
+	}
+	propagateValue(flowState, componentIndex, 1, expressionValue);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/input.cpp
 // -----------------------------------------------------------------------------
@@ -3480,19 +3480,19 @@ void executeEvalExprComponent(FlowState *flowState, unsigned componentIndex) {
 namespace eez {
 namespace flow {
 bool getCallActionValue(FlowState *flowState, unsigned componentIndex, Value &value) {
-    auto component = flowState->flow->components[componentIndex];
-    if (!flowState->parentFlowState) {
-        throwError(flowState, componentIndex, FlowError::Plain("No parentFlowState in Input"));
-        return false;
-    }
-    if (!flowState->parentComponent) {
+	auto component = flowState->flow->components[componentIndex];
+	if (!flowState->parentFlowState) {
+		throwError(flowState, componentIndex, FlowError::Plain("No parentFlowState in Input"));
+		return false;
+	}
+	if (!flowState->parentComponent) {
         if (flowState->parentComponentIndex == -1) {
             value = flowState->inputValue;
             return true;
         }
-        throwError(flowState, componentIndex, FlowError::Plain("No parentComponent in Input"));
-        return false;
-    }
+		throwError(flowState, componentIndex, FlowError::Plain("No parentComponent in Input"));
+		return false;
+	}
     auto callActionComponent = (CallActionActionComponent *)flowState->parentComponent;
     uint8_t callActionComponentInputIndex = callActionComponent->inputsStartIndex;
     if (component->type == defs_v3::COMPONENT_TYPE_INPUT_ACTION) {
@@ -3516,7 +3516,7 @@ bool getCallActionValue(FlowState *flowState, unsigned componentIndex, Value &va
     return true;
 }
 void executeInputComponent(FlowState *flowState, unsigned componentIndex) {
-    Value value;
+	Value value;
     if (getCallActionValue(flowState, componentIndex, value)) {
         auto inputActionComponentExecutionState = (InputActionComponentExecutionState *)flowState->componenentExecutionStates[componentIndex];
         if (!inputActionComponentExecutionState) {
@@ -3526,18 +3526,18 @@ void executeInputComponent(FlowState *flowState, unsigned componentIndex) {
         inputActionComponentExecutionState->value = value;
     }
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/is_true.cpp
 // -----------------------------------------------------------------------------
 namespace eez {
 namespace flow {
 void executeIsTrueComponent(FlowState *flowState, unsigned componentIndex) {
-    Value srcValue;
-    if (!evalProperty(flowState, componentIndex, defs_v3::IS_TRUE_ACTION_COMPONENT_PROPERTY_VALUE, srcValue, FlowError::Property("IsTrue", "Value"))) {
-        return;
-    }
+	Value srcValue;
+	if (!evalProperty(flowState, componentIndex, defs_v3::IS_TRUE_ACTION_COMPONENT_PROPERTY_VALUE, srcValue, FlowError::Property("IsTrue", "Value"))) {
+		return;
+	}
     int err;
     bool result = srcValue.toBool(&err);
     if (err == 0) {
@@ -3550,10 +3550,10 @@ void executeIsTrueComponent(FlowState *flowState, unsigned componentIndex) {
         throwError(flowState, componentIndex, FlowError::PropertyConvert("IsTrue", "Value", "boolean"));
         return;
     }
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/label_in.cpp
 // -----------------------------------------------------------------------------
@@ -3563,8 +3563,8 @@ void executeLabelInComponent(FlowState *flowState, unsigned componentIndex) {
     EEZ_UNUSED(flowState);
     EEZ_UNUSED(componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/label_out.cpp
 // -----------------------------------------------------------------------------
@@ -3579,8 +3579,8 @@ void executeLabelOutComponent(FlowState *flowState, unsigned componentIndex) {
         propagateValueThroughSeqout(flowState, component->labelInComponentIndex);
     }
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/line_chart_widget.cpp
 // -----------------------------------------------------------------------------
@@ -3588,7 +3588,8 @@ void executeLabelOutComponent(FlowState *flowState, unsigned componentIndex) {
 namespace eez {
 namespace flow {
 LineChartWidgetComponenentExecutionState::LineChartWidgetComponenentExecutionState()
-    : data(nullptr) {
+    : data(nullptr)
+{
 }
 LineChartWidgetComponenentExecutionState::~LineChartWidgetComponenentExecutionState() {
     if (data != nullptr) {
@@ -3599,8 +3600,8 @@ LineChartWidgetComponenentExecutionState::~LineChartWidgetComponenentExecutionSt
         eez::free(data);
     }
     for (uint32_t i = 0; i < numLines; i++) {
-        (lineLabels + i)->~Value();
-    }
+		(lineLabels + i)->~Value();
+	}
     eez::free(lineLabels);
 }
 void LineChartWidgetComponenentExecutionState::init(uint32_t numLines_, uint32_t maxPoints_) {
@@ -3609,21 +3610,21 @@ void LineChartWidgetComponenentExecutionState::init(uint32_t numLines_, uint32_t
     data = eez::alloc(maxPoints * sizeof(Value) + maxPoints * numLines * sizeof(float), 0xe4945fea);
     auto xValues = (Value *)data;
     for (uint32_t i = 0; i < maxPoints; i++) {
-        new (xValues + i) Value();
-    }
+		new (xValues + i) Value();
+	}
     numPoints = 0;
     startPointIndex = 0;
     lineLabels = (Value *)eez::alloc(numLines * sizeof(Value), 0xe8afd215);
     for (uint32_t i = 0; i < numLines; i++) {
-        new (lineLabels + i) Value();
-    }
+		new (lineLabels + i) Value();
+	}
     updated = true;
 }
 Value LineChartWidgetComponenentExecutionState::getX(int pointIndex) {
     auto xValues = (Value *)data;
     return xValues[pointIndex];
 }
-void LineChartWidgetComponenentExecutionState::setX(int pointIndex, Value &value) {
+void LineChartWidgetComponenentExecutionState::setX(int pointIndex, Value& value) {
     auto xValues = (Value *)data;
     xValues[pointIndex] = value;
 }
@@ -3717,9 +3718,9 @@ void executeLineChartWidgetComponent(FlowState *flowState, unsigned componentInd
         clearInputValue(flowState, valueInputIndexInFlow);
     }
 }
-} // namespace flow
-} // namespace eez
-#endif
+} 
+} 
+#endif 
 // -----------------------------------------------------------------------------
 // flow/components/log.cpp
 // -----------------------------------------------------------------------------
@@ -3733,12 +3734,12 @@ void executeLogComponent(FlowState *flowState, unsigned componentIndex) {
     Value strValue = value.toString(0x0f9812ee);
     const char *valueStr = strValue.getString();
     if (valueStr && *valueStr) {
-        logInfo(flowState, componentIndex, valueStr);
+      logInfo(flowState, componentIndex, valueStr);
     }
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/loop.cpp
 // -----------------------------------------------------------------------------
@@ -3785,7 +3786,7 @@ void executeLoopComponent(FlowState *flowState, unsigned componentIndex) {
         loopComponentExecutionState = allocateComponentExecutionState<LoopComponenentExecutionState>(flowState, componentIndex);
         loopComponentExecutionState->dstValue = dstValue;
         loopComponentExecutionState->toValue = toValue;
-        currentValue = fromValue;
+		currentValue = fromValue;
     } else {
         if (loopComponentExecutionState->dstValue.getType() == VALUE_TYPE_FLOW_OUTPUT) {
             currentValue = op_add(loopComponentExecutionState->currentValue, stepValue);
@@ -3814,8 +3815,8 @@ void executeLoopComponent(FlowState *flowState, unsigned componentIndex) {
         propagateValueThroughSeqout(flowState, componentIndex);
     }
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/lvgl.cpp
 // -----------------------------------------------------------------------------
@@ -3825,19 +3826,19 @@ void executeLoopComponent(FlowState *flowState, unsigned componentIndex) {
 namespace eez {
 namespace flow {
 static void anim_callback_set_x(void *obj, int32_t v) { lv_obj_set_x((lv_obj_t *)obj, v); }
-static int32_t anim_callback_get_x(lv_anim_t *a) { return lv_obj_get_x_aligned((lv_obj_t *)a->user_data); }
+static int32_t anim_callback_get_x(lv_anim_t * a) { return lv_obj_get_x_aligned((lv_obj_t *)a->user_data); }
 static void anim_callback_set_y(void *obj, int32_t v) { lv_obj_set_y((lv_obj_t *)obj, v); }
-static int32_t anim_callback_get_y(lv_anim_t *a) { return lv_obj_get_y_aligned((lv_obj_t *)a->user_data); }
+static int32_t anim_callback_get_y(lv_anim_t * a) { return lv_obj_get_y_aligned((lv_obj_t *)a->user_data); }
 static void anim_callback_set_width(void *obj, int32_t v) { lv_obj_set_width((lv_obj_t *)obj, v); }
-static int32_t anim_callback_get_width(lv_anim_t *a) { return lv_obj_get_width((lv_obj_t *)a->user_data); }
+static int32_t anim_callback_get_width(lv_anim_t * a) { return lv_obj_get_width((lv_obj_t *)a->user_data); }
 static void anim_callback_set_height(void *obj, int32_t v) { lv_obj_set_height((lv_obj_t *)obj, v); }
-static int32_t anim_callback_get_height(lv_anim_t *a) { return lv_obj_get_height((lv_obj_t *)a->user_data); }
+static int32_t anim_callback_get_height(lv_anim_t * a) { return lv_obj_get_height((lv_obj_t *)a->user_data); }
 static void anim_callback_set_opacity(void *obj, int32_t v) { lv_obj_set_style_opa((lv_obj_t *)obj, v, 0); }
-static int32_t anim_callback_get_opacity(lv_anim_t *a) { return lv_obj_get_style_opa((lv_obj_t *)a->user_data, 0); }
+static int32_t anim_callback_get_opacity(lv_anim_t * a) { return lv_obj_get_style_opa((lv_obj_t *)a->user_data, 0); }
 static void anim_callback_set_image_zoom(void *obj, int32_t v) { lv_img_set_zoom((lv_obj_t *)obj, v); }
-static int32_t anim_callback_get_image_zoom(lv_anim_t *a) { return lv_img_get_zoom((lv_obj_t *)a->user_data); }
+static int32_t anim_callback_get_image_zoom(lv_anim_t * a) { return lv_img_get_zoom((lv_obj_t *)a->user_data); }
 static void anim_callback_set_image_angle(void *obj, int32_t v) { lv_img_set_angle((lv_obj_t *)obj, v); }
-static int32_t anim_callback_get_image_angle(lv_anim_t *a) { return lv_img_get_angle((lv_obj_t *)a->user_data); }
+static int32_t anim_callback_get_image_angle(lv_anim_t * a) { return lv_img_get_angle((lv_obj_t *)a->user_data); }
 lv_anim_exec_xcb_t anim_set_callbacks[] = {
     anim_callback_set_x,
     anim_callback_set_y,
@@ -3845,7 +3846,8 @@ lv_anim_exec_xcb_t anim_set_callbacks[] = {
     anim_callback_set_height,
     anim_callback_set_opacity,
     anim_callback_set_image_zoom,
-    anim_callback_set_image_angle};
+    anim_callback_set_image_angle
+};
 lv_anim_get_value_cb_t anim_get_callbacks[] = {
     anim_callback_get_x,
     anim_callback_get_y,
@@ -3853,14 +3855,16 @@ lv_anim_get_value_cb_t anim_get_callbacks[] = {
     anim_callback_get_height,
     anim_callback_get_opacity,
     anim_callback_get_image_zoom,
-    anim_callback_get_image_angle};
+    anim_callback_get_image_angle
+};
 int32_t (*anim_path_callbacks[])(const lv_anim_t *a) = {
     lv_anim_path_linear,
     lv_anim_path_ease_in,
     lv_anim_path_ease_out,
     lv_anim_path_ease_in_out,
     lv_anim_path_overshoot,
-    lv_anim_path_bounce};
+    lv_anim_path_bounce
+};
 enum PropertyCode {
     NONE,
     ARC_VALUE,
@@ -3977,10 +3981,8 @@ void executeLVGLComponent(FlowState *flowState, unsigned componentIndex) {
                         return;
                     }
                     lv_obj_flag_t flag = LV_OBJ_FLAG_HIDDEN;
-                    if (booleanValue)
-                        lv_obj_add_flag(target, flag);
-                    else
-                        lv_obj_clear_flag(target, flag);
+                    if (booleanValue) lv_obj_add_flag(target, flag);
+                    else lv_obj_clear_flag(target, flag);
                 } else if (specific->property == BASIC_CHECKED || specific->property == BASIC_DISABLED) {
                     int err;
                     bool booleanValue = value.toBool(&err);
@@ -3989,10 +3991,8 @@ void executeLVGLComponent(FlowState *flowState, unsigned componentIndex) {
                         return;
                     }
                     lv_state_t state = specific->property == BASIC_CHECKED ? LV_STATE_CHECKED : LV_STATE_DISABLED;
-                    if (booleanValue)
-                        lv_obj_add_state(target, state);
-                    else
-                        lv_obj_clear_state(target, state);
+                    if (booleanValue) lv_obj_add_state(target, state);
+                    else lv_obj_clear_state(target, state);
                 } else {
                     int err;
                     int32_t intValue = value.toInt32(&err);
@@ -4015,7 +4015,7 @@ void executeLVGLComponent(FlowState *flowState, unsigned componentIndex) {
                     } else if (specific->property == BASIC_OPACITY) {
                         lv_obj_set_style_opa(target, intValue, 0);
                     } else if (specific->property == DROPDOWN_SELECTED) {
-#if LVGL_VERSION_MAJOR >= 9 && LVGL_VERSION_MINOR >= 3
+ #if LVGL_VERSION_MAJOR >= 9 && LVGL_VERSION_MINOR >= 3
                         lv_dropdown_set_selected(target, intValue);
 #else
                         lv_dropdown_set_selected(target, intValue);
@@ -4154,468 +4154,461 @@ void executeLVGLComponent(FlowState *flowState, unsigned componentIndex) {
     }
     propagateValueThroughSeqout(flowState, componentIndex);
 }
-#define ACTION_START(NAME)                                                                                                               \
-    static void NAME(FlowState *flowState, unsigned componentIndex, const ListOfAssetsPtr<Property> &properties, uint32_t actionIndex) { \
-        const char *actionName = #NAME;                                                                                                  \
-        int propIndex = 0;
-#define INT8_PROP(NAME)                                                                                                                                                  \
-    Value NAME##Value;                                                                                                                                                   \
+#define ACTION_START(NAME) static void NAME(FlowState *flowState, unsigned componentIndex, const ListOfAssetsPtr<Property> &properties, uint32_t actionIndex) { \
+    const char *actionName = #NAME; \
+    int propIndex = 0;
+#define INT8_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
+        return; \
+    }\
+    propIndex++; \
     int8_t NAME = NAME##Value.getInt8();
-#define UINT8_PROP(NAME)                                                                                                                                                 \
-    Value NAME##Value;                                                                                                                                                   \
+#define UINT8_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
+        return; \
+    }\
+    propIndex++; \
     uint8_t NAME = NAME##Value.getUInt8();
-#define INT16_PROP(NAME)                                                                                                                                                 \
-    Value NAME##Value;                                                                                                                                                   \
+#define INT16_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
+        return; \
+    }\
+    propIndex++; \
     int16_t NAME = NAME##Value.getInt16();
-#define UINT16_PROP(NAME)                                                                                                                                                \
-    Value NAME##Value;                                                                                                                                                   \
+#define UINT16_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
+        return; \
+    }\
+    propIndex++; \
     uint16_t NAME = NAME##Value.getUInt16();
-#define INT32_PROP(NAME)                                                                                                                                                 \
-    Value NAME##Value;                                                                                                                                                   \
+#define INT32_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
+        return; \
+    }\
+    propIndex++; \
     int32_t NAME = NAME##Value.getInt();
-#define UINT32_PROP(NAME)                                                                                                                                                \
-    Value NAME##Value;                                                                                                                                                   \
+#define UINT32_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
+        return; \
+    }\
+    propIndex++; \
     uint32_t NAME = NAME##Value.getUInt32();
-#define BOOL_PROP(NAME)                                                                                                                                                  \
-    Value NAME##Value;                                                                                                                                                   \
+#define BOOL_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
+        return; \
+    }\
+    propIndex++; \
     int32_t NAME = NAME##Value.getBoolean();
-#define STR_PROP(NAME)                                                                                                                                                   \
-    Value NAME##Value;                                                                                                                                                   \
+#define STR_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
+        return; \
+    }\
+    propIndex++; \
     const char *NAME = NAME##Value.toString(0xe42b3ca2).getString();
-#define SCREEN_PROP(NAME)                                                                                                                                                \
-    Value NAME##Value;                                                                                                                                                   \
+#define SCREEN_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
-    int32_t NAME;                                                                                                                                                        \
-    if (NAME##Value.isString()) {                                                                                                                                        \
-        const char *screenName = NAME##Value.getString();                                                                                                                \
-        NAME = getLvglScreenByNameHook(screenName);                                                                                                                      \
-        if (NAME == 0) {                                                                                                                                                 \
-            throwError(flowState, componentIndex, FlowError::NotFoundInAction("Screen", screenName, actionName, actionIndex));                                           \
-            return;                                                                                                                                                      \
-        }                                                                                                                                                                \
-    } else {                                                                                                                                                             \
-        NAME = NAME##Value.getInt();                                                                                                                                     \
+        return; \
+    }\
+    propIndex++; \
+    int32_t NAME; \
+    if (NAME##Value.isString()) { \
+        const char *screenName = NAME##Value.getString(); \
+        NAME = getLvglScreenByNameHook(screenName); \
+        if (NAME == 0) { \
+            throwError(flowState, componentIndex, FlowError::NotFoundInAction("Screen", screenName, actionName, actionIndex)); \
+            return; \
+        } \
+    } else { \
+        NAME = NAME##Value.getInt(); \
     }
-#define WIDGET_PROP(NAME)                                                                                                                                                \
-    Value NAME##Value;                                                                                                                                                   \
+#define WIDGET_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
-    lv_obj_t *NAME;                                                                                                                                                      \
-    if (NAME##Value.isWidget()) {                                                                                                                                        \
-        NAME = (lv_obj_t *)NAME##Value.getWidget();                                                                                                                      \
-    } else if (NAME##Value.isString()) {                                                                                                                                 \
-        const char *objectName = NAME##Value.getString();                                                                                                                \
-        int32_t widgetIndex = getLvglObjectByNameHook(objectName);                                                                                                       \
-        if (widgetIndex == -1) {                                                                                                                                         \
-            throwError(flowState, componentIndex, FlowError::NotFoundInAction("Widget", objectName, actionName, actionIndex));                                           \
-            return;                                                                                                                                                      \
-        }                                                                                                                                                                \
-        NAME = getLvglObjectFromIndexHook(flowState->lvglWidgetStartIndex + widgetIndex);                                                                                \
-    } else {                                                                                                                                                             \
-        int32_t widgetIndex = NAME##Value.getInt();                                                                                                                      \
-        for (FlowState *fs = flowState; fs; fs = fs->parentFlowState)                                                                                                    \
-            widgetIndex += fs->lvglWidgetStartIndex;                                                                                                                     \
-        NAME = getLvglObjectFromIndexHook(widgetIndex);                                                                                                                  \
-    }                                                                                                                                                                    \
-    if (!NAME) {                                                                                                                                                         \
-        throwError(flowState, componentIndex, FlowError::NullInAction("Widget", actionName, actionIndex));                                                               \
-        return;                                                                                                                                                          \
+        return; \
+    }\
+    propIndex++; \
+    lv_obj_t *NAME; \
+    if (NAME##Value.isWidget()) { \
+        NAME = (lv_obj_t *)NAME##Value.getWidget(); \
+    } else if (NAME##Value.isString()) { \
+        const char *objectName = NAME##Value.getString(); \
+        int32_t widgetIndex = getLvglObjectByNameHook(objectName); \
+        if (widgetIndex == -1) { \
+            throwError(flowState, componentIndex, FlowError::NotFoundInAction("Widget", objectName, actionName, actionIndex)); \
+            return; \
+        } \
+        NAME = getLvglObjectFromIndexHook(flowState->lvglWidgetStartIndex + widgetIndex); \
+    } else { \
+        int32_t widgetIndex = NAME##Value.getInt(); \
+        for (FlowState *fs = flowState; fs; fs = fs->parentFlowState) widgetIndex += fs->lvglWidgetStartIndex; \
+        NAME = getLvglObjectFromIndexHook(widgetIndex); \
+    } \
+    if (!NAME) { \
+        throwError(flowState, componentIndex, FlowError::NullInAction("Widget", actionName, actionIndex)); \
+        return; \
     }
-#define GROUP_PROP(NAME)                                                                                                                                                 \
-    Value NAME##Value;                                                                                                                                                   \
+#define GROUP_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
-    lv_group_t *NAME;                                                                                                                                                    \
-    if (NAME##Value.isString()) {                                                                                                                                        \
-        const char *groupName = NAME##Value.getString();                                                                                                                 \
-        int32_t NAME##_GroupIndex = getLvglGroupByNameHook(groupName);                                                                                                   \
-        if (NAME##_GroupIndex == -1) {                                                                                                                                   \
-            throwError(flowState, componentIndex, FlowError::NotFoundInAction("Group", groupName, actionName, actionIndex));                                             \
-            return;                                                                                                                                                      \
-        }                                                                                                                                                                \
-        NAME = getLvglGroupFromIndexHook(NAME##_GroupIndex);                                                                                                             \
-    } else {                                                                                                                                                             \
-        int32_t NAME##_GroupIndex = NAME##Value.getInt();                                                                                                                \
-        NAME = getLvglGroupFromIndexHook(NAME##_GroupIndex);                                                                                                             \
-    }                                                                                                                                                                    \
-    if (!NAME) {                                                                                                                                                         \
-        throwError(flowState, componentIndex, FlowError::NullInAction("Group", actionName, actionIndex));                                                                \
-        return;                                                                                                                                                          \
+        return; \
+    }\
+    propIndex++; \
+    lv_group_t *NAME; \
+    if (NAME##Value.isString()) { \
+        const char *groupName = NAME##Value.getString(); \
+        int32_t NAME##_GroupIndex = getLvglGroupByNameHook(groupName); \
+        if (NAME##_GroupIndex == -1) { \
+            throwError(flowState, componentIndex, FlowError::NotFoundInAction("Group", groupName, actionName, actionIndex)); \
+            return; \
+        } \
+        NAME = getLvglGroupFromIndexHook(NAME##_GroupIndex); \
+    } else { \
+        int32_t NAME##_GroupIndex = NAME##Value.getInt(); \
+        NAME = getLvglGroupFromIndexHook(NAME##_GroupIndex); \
+    } \
+    if (!NAME) { \
+        throwError(flowState, componentIndex, FlowError::NullInAction("Group", actionName, actionIndex)); \
+        return; \
     }
-#define STYLE_PROP(NAME)                                                                                                                                                 \
-    Value NAME##Value;                                                                                                                                                   \
+#define STYLE_PROP(NAME) \
+    Value NAME##Value; \
     if (!evalExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                          \
-    }                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                         \
-    int32_t NAME;                                                                                                                                                        \
-    if (NAME##Value.isString()) {                                                                                                                                        \
-        const char *styleName = NAME##Value.getString();                                                                                                                 \
-        NAME = getLvglStyleByNameHook(styleName);                                                                                                                        \
-        if (NAME == -1) {                                                                                                                                                \
-            throwError(flowState, componentIndex, FlowError::NotFoundInAction("Style", styleName, actionName, actionIndex));                                             \
-            return;                                                                                                                                                      \
-        }                                                                                                                                                                \
-    } else {                                                                                                                                                             \
-        NAME = NAME##Value.getInt();                                                                                                                                     \
+        return; \
+    }\
+    propIndex++; \
+    int32_t NAME; \
+    if (NAME##Value.isString()) { \
+        const char *styleName = NAME##Value.getString(); \
+        NAME = getLvglStyleByNameHook(styleName); \
+        if (NAME == -1) { \
+            throwError(flowState, componentIndex, FlowError::NotFoundInAction("Style", styleName, actionName, actionIndex)); \
+            return; \
+        } \
+    } else { \
+        NAME = NAME##Value.getInt(); \
     }
-#define RESULT(NAME, VALUE)                                                                                                                                                              \
-    Value NAME##Value;                                                                                                                                                                   \
+#define RESULT(NAME, VALUE) \
+    Value NAME##Value; \
     if (!evalAssignableExpression(flowState, componentIndex, properties[propIndex]->evalInstructions, NAME##Value, FlowError::PropertyAssignInAction(#NAME, actionName, actionIndex))) { \
-        return;                                                                                                                                                                          \
-    }                                                                                                                                                                                    \
-    propIndex++;                                                                                                                                                                         \
+        return; \
+    }\
+    propIndex++; \
     assignValue(flowState, componentIndex, NAME##Value, VALUE);
 #define ACTION_END }
 ACTION_START(changeScreen)
-SCREEN_PROP(screen);
-INT32_PROP(fadeMode);
-UINT32_PROP(speed);
-UINT32_PROP(delay);
-if (properties.count > 4) {
-    BOOL_PROP(useStack);
-    if (useStack) {
-        eez_flow_push_screen(screen, (lv_scr_load_anim_t)fadeMode, speed, delay);
+    SCREEN_PROP(screen);
+    INT32_PROP(fadeMode);
+    UINT32_PROP(speed);
+    UINT32_PROP(delay);
+    if (properties.count > 4) {
+        BOOL_PROP(useStack);
+        if (useStack) {
+            eez_flow_push_screen(screen, (lv_scr_load_anim_t)fadeMode, speed, delay);
+        } else {
+            eez::flow::replacePageHook(screen, (lv_scr_load_anim_t)fadeMode, speed, delay);
+        }
     } else {
-        eez::flow::replacePageHook(screen, (lv_scr_load_anim_t)fadeMode, speed, delay);
+        eez_flow_push_screen(screen, (lv_scr_load_anim_t)fadeMode, speed, delay);
     }
-} else {
-    eez_flow_push_screen(screen, (lv_scr_load_anim_t)fadeMode, speed, delay);
-}
 ACTION_END
 ACTION_START(changeToPreviousScreen)
-INT32_PROP(fadeMode);
-UINT32_PROP(speed);
-UINT32_PROP(delay);
-eez_flow_pop_screen((lv_scr_load_anim_t)fadeMode, speed, delay);
+    INT32_PROP(fadeMode);
+    UINT32_PROP(speed);
+    UINT32_PROP(delay);
+    eez_flow_pop_screen((lv_scr_load_anim_t)fadeMode, speed, delay);
 ACTION_END
 ACTION_START(objSetX)
-WIDGET_PROP(obj);
-INT32_PROP(x);
+    WIDGET_PROP(obj);
+    INT32_PROP(x);
 #if LVGL_VERSION_MAJOR >= 9
-lv_obj_set_x(obj, x);
+    lv_obj_set_x(obj, x);
 #else
-lv_obj_set_x(obj, (lv_coord_t)x);
+    lv_obj_set_x(obj, (lv_coord_t)x);
 #endif
 ACTION_END
 ACTION_START(objGetX)
-WIDGET_PROP(obj);
+    WIDGET_PROP(obj);
 #if LVGL_VERSION_MAJOR >= 9
-int32_t x = (int32_t)lv_obj_get_x(obj);
+    int32_t x = (int32_t)lv_obj_get_x(obj);
 #else
-int32_t x = lv_obj_get_x(obj);
+    int32_t x = lv_obj_get_x(obj);
 #endif
-RESULT(result, Value((int)x, VALUE_TYPE_INT32));
+    RESULT(result, Value((int)x, VALUE_TYPE_INT32));
 ACTION_END
 ACTION_START(objSetY)
-WIDGET_PROP(obj);
-INT32_PROP(y);
+    WIDGET_PROP(obj);
+    INT32_PROP(y);
 #if LVGL_VERSION_MAJOR >= 9
-lv_obj_set_y(obj, y);
+    lv_obj_set_y(obj, y);
 #else
-lv_obj_set_y(obj, (lv_coord_t)y);
+    lv_obj_set_y(obj, (lv_coord_t)y);
 #endif
 ACTION_END
 ACTION_START(objGetY)
-WIDGET_PROP(obj);
+    WIDGET_PROP(obj);
 #if LVGL_VERSION_MAJOR >= 9
-int32_t y = (int32_t)lv_obj_get_y(obj);
+    int32_t y = (int32_t)lv_obj_get_y(obj);
 #else
-int32_t y = lv_obj_get_y(obj);
+    int32_t y = lv_obj_get_y(obj);
 #endif
-RESULT(result, Value((int)y, VALUE_TYPE_INT32));
+    RESULT(result, Value((int)y, VALUE_TYPE_INT32));
 ACTION_END
 ACTION_START(objSetWidth)
-WIDGET_PROP(obj);
-INT32_PROP(width);
+    WIDGET_PROP(obj);
+    INT32_PROP(width);
 #if LVGL_VERSION_MAJOR >= 9
-lv_obj_set_width(obj, width);
+    lv_obj_set_width(obj, width);
 #else
-lv_obj_set_width(obj, (lv_coord_t)width);
+    lv_obj_set_width(obj, (lv_coord_t)width);
 #endif
 ACTION_END
 ACTION_START(objGetWidth)
-WIDGET_PROP(obj);
+    WIDGET_PROP(obj);
 #if LVGL_VERSION_MAJOR >= 9
-int32_t width = (int32_t)lv_obj_get_width(obj);
+    int32_t width = (int32_t)lv_obj_get_width(obj);
 #else
-int32_t width = lv_obj_get_width(obj);
+    int32_t width = lv_obj_get_width(obj);
 #endif
-RESULT(result, Value((int)width, VALUE_TYPE_INT32));
+    RESULT(result, Value((int)width, VALUE_TYPE_INT32));
 ACTION_END
 ACTION_START(objSetHeight)
-WIDGET_PROP(obj);
-INT32_PROP(height);
+    WIDGET_PROP(obj);
+    INT32_PROP(height);
 #if LVGL_VERSION_MAJOR >= 9
-lv_obj_set_height(obj, height);
+    lv_obj_set_height(obj, height);
 #else
-lv_obj_set_height(obj, (lv_coord_t)height);
+    lv_obj_set_height(obj, (lv_coord_t)height);
 #endif
 ACTION_END
 ACTION_START(objGetHeight)
-WIDGET_PROP(obj);
+    WIDGET_PROP(obj);
 #if LVGL_VERSION_MAJOR >= 9
-int32_t height = (int32_t)lv_obj_get_height(obj);
+    int32_t height = (int32_t)lv_obj_get_height(obj);
 #else
-int32_t height = lv_obj_get_height(obj);
+    int32_t height = lv_obj_get_height(obj);
 #endif
-RESULT(result, Value((int)height, VALUE_TYPE_INT32));
+    RESULT(result, Value((int)height, VALUE_TYPE_INT32));
 ACTION_END
 ACTION_START(objSetStyleOpa)
-WIDGET_PROP(obj);
-INT32_PROP(opa);
-lv_obj_set_style_opa(obj, (lv_opa_t)opa, 0);
+    WIDGET_PROP(obj);
+    INT32_PROP(opa);
+    lv_obj_set_style_opa(obj, (lv_opa_t)opa, 0);
 ACTION_END
 ACTION_START(objGetStyleOpa)
-WIDGET_PROP(obj);
-int32_t opa = (int32_t)lv_obj_get_style_opa(obj, 0);
-RESULT(result, Value((int)opa, VALUE_TYPE_INT32));
+    WIDGET_PROP(obj);
+    int32_t opa = (int32_t)lv_obj_get_style_opa(obj, 0);
+    RESULT(result, Value((int)opa, VALUE_TYPE_INT32));
 ACTION_END
 ACTION_START(objAddStyle)
-WIDGET_PROP(obj);
-STYLE_PROP(style);
-lvglObjAddStyleHook(obj, style);
+    WIDGET_PROP(obj);
+    STYLE_PROP(style);
+    lvglObjAddStyleHook(obj, style);
 ACTION_END
 ACTION_START(objRemoveStyle)
-WIDGET_PROP(obj);
-STYLE_PROP(style);
-lvglObjRemoveStyleHook(obj, style);
+    WIDGET_PROP(obj);
+    STYLE_PROP(style);
+    lvglObjRemoveStyleHook(obj, style);
 ACTION_END
 ACTION_START(objSetFlagHidden)
-WIDGET_PROP(obj);
-BOOL_PROP(hidden);
-if (hidden)
-    lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
-else
-    lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    WIDGET_PROP(obj);
+    BOOL_PROP(hidden);
+    if (hidden) lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
 ACTION_END
 ACTION_START(objAddFlag)
-WIDGET_PROP(obj);
-INT32_PROP(flag);
-lv_obj_add_flag(obj, (lv_obj_flag_t)flag);
+    WIDGET_PROP(obj);
+    INT32_PROP(flag);
+    lv_obj_add_flag(obj, (lv_obj_flag_t)flag);
 ACTION_END
 ACTION_START(objClearFlag)
-WIDGET_PROP(obj);
-INT32_PROP(flag);
-lv_obj_clear_flag(obj, (lv_obj_flag_t)flag);
+    WIDGET_PROP(obj);
+    INT32_PROP(flag);
+    lv_obj_clear_flag(obj, (lv_obj_flag_t)flag);
 ACTION_END
 ACTION_START(objHasFlag)
-WIDGET_PROP(obj);
-INT32_PROP(flag);
-bool result = lv_obj_has_flag(obj, (lv_obj_flag_t)flag);
-RESULT(result, Value(result, VALUE_TYPE_BOOLEAN));
+    WIDGET_PROP(obj);
+    INT32_PROP(flag);
+    bool result = lv_obj_has_flag(obj, (lv_obj_flag_t)flag);
+    RESULT(result, Value(result, VALUE_TYPE_BOOLEAN));
 ACTION_END
 ACTION_START(objSetStateChecked)
-WIDGET_PROP(obj);
-BOOL_PROP(checked);
-if (checked)
-    lv_obj_add_state(obj, LV_STATE_CHECKED);
-else
-    lv_obj_clear_state(obj, LV_STATE_CHECKED);
+    WIDGET_PROP(obj);
+    BOOL_PROP(checked);
+    if (checked) lv_obj_add_state(obj, LV_STATE_CHECKED);
+    else lv_obj_clear_state(obj, LV_STATE_CHECKED);
 ACTION_END
 ACTION_START(objSetStateDisabled)
-WIDGET_PROP(obj);
-BOOL_PROP(disabled);
-if (disabled)
-    lv_obj_add_state(obj, LV_STATE_DISABLED);
-else
-    lv_obj_clear_state(obj, LV_STATE_DISABLED);
+    WIDGET_PROP(obj);
+    BOOL_PROP(disabled);
+    if (disabled) lv_obj_add_state(obj, LV_STATE_DISABLED);
+    else lv_obj_clear_state(obj, LV_STATE_DISABLED);
 ACTION_END
 ACTION_START(objAddState)
-WIDGET_PROP(obj);
-INT32_PROP(state);
-lv_obj_add_state(obj, (lv_state_t)state);
+    WIDGET_PROP(obj);
+    INT32_PROP(state);
+    lv_obj_add_state(obj, (lv_state_t)state);
 ACTION_END
 ACTION_START(objClearState)
-WIDGET_PROP(obj);
-INT32_PROP(state);
-lv_obj_clear_state(obj, (lv_state_t)state);
+    WIDGET_PROP(obj);
+    INT32_PROP(state);
+    lv_obj_clear_state(obj, (lv_state_t)state);
 ACTION_END
 ACTION_START(objHasState)
-WIDGET_PROP(obj);
-INT32_PROP(flag);
-bool result = lv_obj_has_state(obj, (lv_state_t)flag);
-RESULT(result, Value(result, VALUE_TYPE_BOOLEAN));
+    WIDGET_PROP(obj);
+    INT32_PROP(flag);
+    bool result = lv_obj_has_state(obj, (lv_state_t)flag);
+    RESULT(result, Value(result, VALUE_TYPE_BOOLEAN));
 ACTION_END
 ACTION_START(arcSetValue)
-WIDGET_PROP(obj);
-INT32_PROP(value);
-lv_arc_set_value(obj, value);
+    WIDGET_PROP(obj);
+    INT32_PROP(value);
+    lv_arc_set_value(obj, value);
 ACTION_END
 ACTION_START(barSetValue)
-WIDGET_PROP(obj);
-INT32_PROP(value);
-BOOL_PROP(animated);
-lv_bar_set_value(obj, value, animated ? LV_ANIM_ON : LV_ANIM_OFF);
+    WIDGET_PROP(obj);
+    INT32_PROP(value);
+    BOOL_PROP(animated);
+    lv_bar_set_value(obj, value, animated ? LV_ANIM_ON : LV_ANIM_OFF);
 ACTION_END
 ACTION_START(dropdownSetSelected)
-WIDGET_PROP(obj);
-UINT32_PROP(value);
+    WIDGET_PROP(obj);
+    UINT32_PROP(value);
 #if LVGL_VERSION_MAJOR >= 9
 #if LVGL_VERSION_MINOR >= 3
-lv_dropdown_set_selected(obj, value);
+    lv_dropdown_set_selected(obj, value);
 #else
-lv_dropdown_set_selected(obj, value);
+    lv_dropdown_set_selected(obj, value);
 #endif
 #else
-lv_dropdown_set_selected(obj, (uint16_t)value);
+    lv_dropdown_set_selected(obj, (uint16_t)value);
 #endif
 ACTION_END
 ACTION_START(imageSetSrc)
-WIDGET_PROP(obj);
-STR_PROP(str);
-const void *src = getLvglImageByNameHook(str);
-if (src) {
-    lv_img_set_src(obj, src);
-} else {
-    throwError(flowState, componentIndex, FlowError::NotFoundInAction("Image", str, "imageSetSrc", actionIndex));
-}
+    WIDGET_PROP(obj);
+    STR_PROP(str);
+    const void *src = getLvglImageByNameHook(str);
+    if (src) {
+        lv_img_set_src(obj, src);
+    } else {
+        throwError(flowState, componentIndex, FlowError::NotFoundInAction("Image", str, "imageSetSrc", actionIndex));
+    }
 ACTION_END
 ACTION_START(imageSetAngle)
-WIDGET_PROP(obj);
-INT16_PROP(angle);
-lv_img_set_angle(obj, angle);
+    WIDGET_PROP(obj);
+    INT16_PROP(angle);
+    lv_img_set_angle(obj, angle);
 ACTION_END
 ACTION_START(imageSetZoom)
-WIDGET_PROP(obj);
-UINT16_PROP(zoom);
-lv_img_set_zoom(obj, zoom);
+    WIDGET_PROP(obj);
+    UINT16_PROP(zoom);
+    lv_img_set_zoom(obj, zoom);
 ACTION_END
 ACTION_START(labelSetText)
-WIDGET_PROP(obj);
-STR_PROP(text);
-lv_label_set_text(obj, text);
+    WIDGET_PROP(obj);
+    STR_PROP(text);
+    lv_label_set_text(obj, text);
 ACTION_END
 ACTION_START(qrCodeUpdate)
-WIDGET_PROP(obj);
-STR_PROP(text);
+    WIDGET_PROP(obj);
+    STR_PROP(text);
 #if LV_USE_QRCODE
-lv_qrcode_update(obj, text, strlen(text));
+    lv_qrcode_update(obj, text, strlen(text));
 #endif
 ACTION_END
 ACTION_START(rollerSetSelected)
-WIDGET_PROP(obj);
-UINT32_PROP(selected);
-BOOL_PROP(animated);
+    WIDGET_PROP(obj);
+    UINT32_PROP(selected);
+    BOOL_PROP(animated);
 #if LVGL_VERSION_MAJOR >= 9
-lv_roller_set_selected(obj, selected, animated ? LV_ANIM_ON : LV_ANIM_OFF);
+    lv_roller_set_selected(obj, selected, animated ? LV_ANIM_ON : LV_ANIM_OFF);
 #else
-lv_roller_set_selected(obj, (uint16_t)selected, animated ? LV_ANIM_ON : LV_ANIM_OFF);
+    lv_roller_set_selected(obj, (uint16_t)selected, animated ? LV_ANIM_ON : LV_ANIM_OFF);
 #endif
 ACTION_END
 ACTION_START(sliderSetValue)
-WIDGET_PROP(obj);
-INT32_PROP(value);
-BOOL_PROP(animated);
-lv_slider_set_value(obj, value, animated ? LV_ANIM_ON : LV_ANIM_OFF);
+    WIDGET_PROP(obj);
+    INT32_PROP(value);
+    BOOL_PROP(animated);
+    lv_slider_set_value(obj, value, animated ? LV_ANIM_ON : LV_ANIM_OFF);
 ACTION_END
 ACTION_START(sliderSetValueLeft)
-WIDGET_PROP(obj);
-INT32_PROP(valueLeft);
-BOOL_PROP(animated);
-lv_slider_set_left_value(obj, valueLeft, animated ? LV_ANIM_ON : LV_ANIM_OFF);
+    WIDGET_PROP(obj);
+    INT32_PROP(valueLeft);
+    BOOL_PROP(animated);
+    lv_slider_set_left_value(obj, valueLeft, animated ? LV_ANIM_ON : LV_ANIM_OFF);
 ACTION_END
 ACTION_START(sliderSetRange)
-WIDGET_PROP(obj);
-INT32_PROP(min);
-INT32_PROP(max);
-lv_slider_set_range(obj, min, max);
+    WIDGET_PROP(obj);
+    INT32_PROP(min);
+    INT32_PROP(max);
+    lv_slider_set_range(obj, min, max);
 ACTION_END
 ACTION_START(keyboardSetTextarea)
-WIDGET_PROP(obj);
-WIDGET_PROP(textarea);
-lv_keyboard_set_textarea(obj, textarea);
+    WIDGET_PROP(obj);
+    WIDGET_PROP(textarea);
+    lv_keyboard_set_textarea(obj, textarea);
 ACTION_END
 ACTION_START(groupFocusObj)
-WIDGET_PROP(obj);
-lv_group_focus_obj(obj);
+    WIDGET_PROP(obj);
+    lv_group_focus_obj(obj);
 ACTION_END
 ACTION_START(groupFocusNext)
-GROUP_PROP(group);
-lv_group_focus_next(group);
+    GROUP_PROP(group);
+    lv_group_focus_next(group);
 ACTION_END
 ACTION_START(groupFocusPrev)
-GROUP_PROP(group);
-lv_group_focus_prev(group);
+    GROUP_PROP(group);
+    lv_group_focus_prev(group);
 ACTION_END
 ACTION_START(groupGetFocused)
-GROUP_PROP(group);
-lv_obj_t *obj = lv_group_get_focused(group);
-RESULT(result, Value(obj, VALUE_TYPE_WIDGET));
+    GROUP_PROP(group);
+    lv_obj_t *obj = lv_group_get_focused(group);
+    RESULT(result, Value(obj, VALUE_TYPE_WIDGET));
 ACTION_END
 ACTION_START(groupFocusFreeze)
-GROUP_PROP(group);
-BOOL_PROP(enabled);
-lv_group_focus_freeze(group, enabled);
+    GROUP_PROP(group);
+    BOOL_PROP(enabled);
+    lv_group_focus_freeze(group, enabled);
 ACTION_END
 ACTION_START(groupSetWrap)
-GROUP_PROP(group);
-BOOL_PROP(enabled);
-lv_group_set_wrap(group, enabled);
+    GROUP_PROP(group);
+    BOOL_PROP(enabled);
+    lv_group_set_wrap(group, enabled);
 ACTION_END
 ACTION_START(groupSetEditing)
-GROUP_PROP(group);
-BOOL_PROP(enabled);
-lv_group_set_editing(group, enabled);
+    GROUP_PROP(group);
+    BOOL_PROP(enabled);
+    lv_group_set_editing(group, enabled);
 ACTION_END
-#define ANIM_PROPS       \
-    WIDGET_PROP(obj);    \
-    INT32_PROP(start);   \
-    INT32_PROP(end);     \
-    INT32_PROP(delay);   \
-    INT32_PROP(time);    \
+#define ANIM_PROPS \
+    WIDGET_PROP(obj); \
+    INT32_PROP(start); \
+    INT32_PROP(end); \
+    INT32_PROP(delay); \
+    INT32_PROP(time); \
     BOOL_PROP(relative); \
-    BOOL_PROP(instant);  \
+    BOOL_PROP(instant); \
     INT32_PROP(path);
 static void playAnimation(lv_obj_t *obj,
-                          int32_t start,
-                          int32_t end,
-                          int32_t delay,
-                          int32_t time,
-                          bool relative,
-                          bool instant,
-                          int32_t path,
-                          lv_anim_exec_xcb_t set_callback,
-                          lv_anim_get_value_cb_t get_callback) {
+    int32_t start,
+    int32_t end,
+    int32_t delay,
+    int32_t time,
+    bool relative,
+    bool instant,
+    int32_t path,
+    lv_anim_exec_xcb_t set_callback,
+    lv_anim_get_value_cb_t get_callback
+) {
     lv_anim_t anim;
     lv_anim_init(&anim);
     lv_anim_set_time(&anim, time);
@@ -4632,159 +4625,160 @@ static void playAnimation(lv_obj_t *obj,
     lv_anim_start(&anim);
 }
 ACTION_START(animX)
-ANIM_PROPS;
-playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_x, anim_callback_get_x);
+    ANIM_PROPS;
+    playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_x, anim_callback_get_x);
 ACTION_END
 ACTION_START(animY)
-ANIM_PROPS;
-playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_y, anim_callback_get_y);
+    ANIM_PROPS;
+    playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_y, anim_callback_get_y);
 ACTION_END
 ACTION_START(animWidth)
-ANIM_PROPS;
-playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_width, anim_callback_get_width);
+    ANIM_PROPS;
+    playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_width, anim_callback_get_width);
 ACTION_END
 ACTION_START(animHeight)
-ANIM_PROPS;
-playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_height, anim_callback_get_height);
+    ANIM_PROPS;
+    playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_height, anim_callback_get_height);
 ACTION_END
 ACTION_START(animOpacity)
-ANIM_PROPS;
-playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_opacity, anim_callback_get_opacity);
+    ANIM_PROPS;
+    playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_opacity, anim_callback_get_opacity);
 ACTION_END
 ACTION_START(animImageZoom)
-ANIM_PROPS;
-playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_image_zoom, anim_callback_get_image_zoom);
+    ANIM_PROPS;
+    playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_image_zoom, anim_callback_get_image_zoom);
 ACTION_END
 ACTION_START(animImageAngle)
-ANIM_PROPS;
-playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_image_angle, anim_callback_get_image_angle);
+    ANIM_PROPS;
+    playAnimation(obj, start, end, delay, time, relative, instant, path, anim_callback_set_image_angle, anim_callback_get_image_angle);
 ACTION_END
 ACTION_START(createScreen)
-SCREEN_PROP(screen);
-eez_flow_create_screen(screen);
+    SCREEN_PROP(screen);
+    eez_flow_create_screen(screen);
 ACTION_END
 ACTION_START(deleteScreen)
-SCREEN_PROP(screen);
-eez_flow_delete_screen(screen);
+    SCREEN_PROP(screen);
+    eez_flow_delete_screen(screen);
 ACTION_END
 ACTION_START(isScreenCreated)
-SCREEN_PROP(screen);
-bool isCreated = eez_flow_is_screen_created(screen);
-RESULT(result, Value(isCreated, VALUE_TYPE_BOOLEAN));
+    SCREEN_PROP(screen);
+    bool isCreated = eez_flow_is_screen_created(screen);
+    RESULT(result, Value(isCreated, VALUE_TYPE_BOOLEAN));
 ACTION_END
 ACTION_START(calendarSetTodayDate)
-WIDGET_PROP(obj);
-UINT32_PROP(year);
-UINT32_PROP(month);
-UINT32_PROP(day);
-lv_calendar_set_today_date(obj, year, month, day);
+    WIDGET_PROP(obj);
+    UINT32_PROP(year);
+    UINT32_PROP(month);
+    UINT32_PROP(day);
+    lv_calendar_set_today_date(obj, year, month, day);
 ACTION_END
 ACTION_START(calendarSetShowedDate)
-WIDGET_PROP(obj);
-UINT32_PROP(year);
-UINT32_PROP(month);
-lv_calendar_set_showed_date(obj, year, month);
+    WIDGET_PROP(obj);
+    UINT32_PROP(year);
+    UINT32_PROP(month);
+    lv_calendar_set_showed_date(obj, year, month);
 ACTION_END
 ACTION_START(calendarSetHighlightedDate)
-WIDGET_PROP(obj);
-UINT32_PROP(year);
-UINT32_PROP(month);
-UINT32_PROP(day);
-lv_calendar_date_t d;
-d.year = year;
-d.month = month;
-d.day = day;
-lv_calendar_set_highlighted_dates(obj, &d, 1);
+    WIDGET_PROP(obj);
+    UINT32_PROP(year);
+    UINT32_PROP(month);
+    UINT32_PROP(day);
+    lv_calendar_date_t d;
+    d.year = year;
+    d.month = month;
+    d.day = day;
+    lv_calendar_set_highlighted_dates(obj, &d, 1);
 ACTION_END
 ACTION_START(calendarGetPressedDate)
-WIDGET_PROP(obj);
-lv_calendar_date_t d;
-lv_calendar_get_pressed_date(obj, &d);
-RESULT(year, Value((int)d.year, VALUE_TYPE_INT32));
-RESULT(month, Value((int)d.month, VALUE_TYPE_INT32));
-RESULT(day, Value((int)d.day, VALUE_TYPE_INT32));
+    WIDGET_PROP(obj);
+    lv_calendar_date_t d;
+    lv_calendar_get_pressed_date(obj, &d);
+    RESULT(year, Value((int)d.year, VALUE_TYPE_INT32));
+    RESULT(month, Value((int)d.month, VALUE_TYPE_INT32));
+    RESULT(day, Value((int)d.day, VALUE_TYPE_INT32));
 ACTION_END
 ACTION_START(buttonMatrixSetButtonCtrl)
-WIDGET_PROP(obj);
-UINT32_PROP(buttonID);
-UINT32_PROP(ctrl);
+    WIDGET_PROP(obj);
+    UINT32_PROP(buttonID);
+    UINT32_PROP(ctrl);
 #if LVGL_VERSION_MAJOR >= 9
-lv_buttonmatrix_set_button_ctrl(obj, buttonID, (lv_buttonmatrix_ctrl_t)ctrl);
+    lv_buttonmatrix_set_button_ctrl(obj, buttonID, (lv_buttonmatrix_ctrl_t)ctrl);
 #else
-lv_btnmatrix_set_btn_ctrl(obj, buttonID, (lv_btnmatrix_ctrl_t)ctrl);
+    lv_btnmatrix_set_btn_ctrl(obj, buttonID, (lv_btnmatrix_ctrl_t)ctrl);
 #endif
 ACTION_END
 ACTION_START(buttonMatrixClearButtonCtrl)
-WIDGET_PROP(obj);
-UINT32_PROP(buttonID);
-UINT32_PROP(ctrl);
+    WIDGET_PROP(obj);
+    UINT32_PROP(buttonID);
+    UINT32_PROP(ctrl);
 #if LVGL_VERSION_MAJOR >= 9
-lv_buttonmatrix_clear_button_ctrl(obj, buttonID, (lv_buttonmatrix_ctrl_t)ctrl);
+    lv_buttonmatrix_clear_button_ctrl(obj, buttonID, (lv_buttonmatrix_ctrl_t)ctrl);
 #else
-lv_btnmatrix_set_btn_ctrl(obj, buttonID, (lv_btnmatrix_ctrl_t)ctrl);
+    lv_btnmatrix_set_btn_ctrl(obj, buttonID, (lv_btnmatrix_ctrl_t)ctrl);
 #endif
 ACTION_END
 typedef void (*ActionType)(FlowState *flowState, unsigned componentIndex, const ListOfAssetsPtr<Property> &properties, uint32_t actionIndex);
 static ActionType actions[] = {
-    &changeScreen,
-    &changeToPreviousScreen,
-    &objSetX,
-    &objGetX,
-    &objSetY,
-    &objGetY,
-    &objSetWidth,
-    &objGetWidth,
-    &objSetHeight,
-    &objGetHeight,
-    &objSetStyleOpa,
-    &objGetStyleOpa,
-    &objAddStyle,
-    &objRemoveStyle,
-    &objSetFlagHidden,
-    &objAddFlag,
-    &objClearFlag,
-    &objHasFlag,
-    &objSetStateChecked,
-    &objSetStateDisabled,
-    &objAddState,
-    &objClearState,
-    &objHasState,
-    &arcSetValue,
-    &barSetValue,
-    &dropdownSetSelected,
-    &imageSetSrc,
-    &imageSetAngle,
-    &imageSetZoom,
-    &labelSetText,
-    &rollerSetSelected,
-    &sliderSetValue,
-    &keyboardSetTextarea,
-    &groupFocusObj,
-    &groupFocusNext,
-    &groupFocusPrev,
-    &groupGetFocused,
-    &groupFocusFreeze,
-    &groupSetWrap,
-    &groupSetEditing,
-    &animX,
-    &animY,
-    &animWidth,
-    &animHeight,
-    &animOpacity,
-    &animImageZoom,
-    &animImageAngle,
-    &createScreen,
-    &deleteScreen,
-    &isScreenCreated,
-    &calendarSetTodayDate,
-    &calendarSetShowedDate,
-    &calendarSetHighlightedDate,
-    &calendarGetPressedDate,
-    &buttonMatrixSetButtonCtrl,
-    &buttonMatrixClearButtonCtrl,
-    &sliderSetValueLeft,
-    &sliderSetRange,
-    &qrCodeUpdate};
+     &changeScreen,
+     &changeToPreviousScreen,
+     &objSetX,
+     &objGetX,
+     &objSetY,
+     &objGetY,
+     &objSetWidth,
+     &objGetWidth,
+     &objSetHeight,
+     &objGetHeight,
+     &objSetStyleOpa,
+     &objGetStyleOpa,
+     &objAddStyle,
+     &objRemoveStyle,
+     &objSetFlagHidden,
+     &objAddFlag,
+     &objClearFlag,
+     &objHasFlag,
+     &objSetStateChecked,
+     &objSetStateDisabled,
+     &objAddState,
+     &objClearState,
+     &objHasState,
+     &arcSetValue,
+     &barSetValue,
+     &dropdownSetSelected,
+     &imageSetSrc,
+     &imageSetAngle,
+     &imageSetZoom,
+     &labelSetText,
+     &rollerSetSelected,
+     &sliderSetValue,
+     &keyboardSetTextarea,
+     &groupFocusObj,
+     &groupFocusNext,
+     &groupFocusPrev,
+     &groupGetFocused,
+     &groupFocusFreeze,
+     &groupSetWrap,
+     &groupSetEditing,
+     &animX,
+     &animY,
+     &animWidth,
+     &animHeight,
+     &animOpacity,
+     &animImageZoom,
+     &animImageAngle,
+     &createScreen,
+     &deleteScreen,
+     &isScreenCreated,
+     &calendarSetTodayDate,
+     &calendarSetShowedDate,
+     &calendarSetHighlightedDate,
+     &calendarGetPressedDate,
+     &buttonMatrixSetButtonCtrl,
+     &buttonMatrixClearButtonCtrl,
+     &sliderSetValueLeft,
+     &sliderSetRange,
+     &qrCodeUpdate
+};
 struct LVGLApiExecutionState : public ComponenentExecutionState {
     uint32_t actionIndex;
 };
@@ -4797,8 +4791,8 @@ void executeLVGLApiComponent(FlowState *flowState, unsigned componentIndex) {
     }
     propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 #else
 namespace eez {
 namespace flow {
@@ -4808,8 +4802,8 @@ void executeLVGLComponent(FlowState *flowState, unsigned componentIndex) {
 void executeLVGLApiComponent(FlowState *flowState, unsigned componentIndex) {
     throwError(flowState, componentIndex, FlowError::Plain("Not implemented"));
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 #endif
 // -----------------------------------------------------------------------------
 // flow/components/lvgl_user_widget.cpp
@@ -4818,9 +4812,9 @@ void executeLVGLApiComponent(FlowState *flowState, unsigned componentIndex) {
 namespace eez {
 namespace flow {
 struct LVGLUserWidgetComponent : public Component {
-    int16_t flowIndex;
-    uint8_t inputsStartIndex;
-    uint8_t outputsStartIndex;
+	int16_t flowIndex;
+	uint8_t inputsStartIndex;
+	uint8_t outputsStartIndex;
     int32_t widgetStartIndex;
 };
 LVGLUserWidgetExecutionState *createUserWidgetFlowState(FlowState *flowState, unsigned userWidgetWidgetComponentIndex) {
@@ -4847,7 +4841,8 @@ void executeLVGLUserWidgetComponent(FlowState *flowState, unsigned componentInde
     for (
         unsigned userWidgetComponentIndex = 0;
         userWidgetComponentIndex < userWidgetFlowState->flow->components.count;
-        userWidgetComponentIndex++) {
+        userWidgetComponentIndex++
+    ) {
         auto userWidgetComponent = userWidgetFlowState->flow->components[userWidgetComponentIndex];
         if (userWidgetComponent->type == defs_v3::COMPONENT_TYPE_INPUT_ACTION) {
             auto inputActionComponentExecutionState = (InputActionComponentExecutionState *)userWidgetFlowState->componenentExecutionStates[userWidgetComponentIndex];
@@ -4874,16 +4869,16 @@ void executeLVGLUserWidgetComponent(FlowState *flowState, unsigned componentInde
         }
     }
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 #else
 namespace eez {
 namespace flow {
 void executeLVGLUserWidgetComponent(FlowState *flowState, unsigned componentIndex) {
     throwError(flowState, componentIndex, FlowError::Plain("Not implemented"));
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 #endif
 // -----------------------------------------------------------------------------
 // flow/components/mqtt.cpp
@@ -4907,7 +4902,7 @@ struct MQTTEvent {
     MQTTEvent *next;
 };
 struct MQTTEventActionComponenentExecutionState : public ComponenentExecutionState {
-    FlowState *flowState;
+	FlowState *flowState;
     unsigned componentIndex;
     MQTTEvent *firstEvent;
     MQTTEvent *lastEvent;
@@ -4988,7 +4983,8 @@ static void deleteConnection(void *handle) {
     while (connection->firstEventHandler) {
         deallocateComponentExecutionState(
             connection->firstEventHandler->componentExecutionState->flowState,
-            connection->firstEventHandler->componentExecutionState->componentIndex);
+            connection->firstEventHandler->componentExecutionState->componentIndex
+        );
     }
     eez_mqtt_deinit(connection->handle);
     if (connection->prev) {
@@ -5128,7 +5124,7 @@ void executeMQTTInitComponent(FlowState *flowState, unsigned componentIndex) {
     statusArray->values[defs_v3::SYSTEM_STRUCTURE_OBJECT_VARIABLE_STATUS_FIELD_ERROR] = Value();
     connectionArray->values[defs_v3::OBJECT_TYPE_MQTT_CONNECTION_FIELD_STATUS] = statusValue;
     assignValue(flowState, componentIndex, connectionDstValue, connectionValue);
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
 void executeMQTTConnectComponent(FlowState *flowState, unsigned componentIndex) {
     Value connectionValue;
@@ -5148,7 +5144,7 @@ void executeMQTTConnectComponent(FlowState *flowState, unsigned componentIndex) 
         throwError(flowState, componentIndex, FlowError::Plain(errorMessage));
         return;
     }
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
 void executeMQTTDisconnectComponent(FlowState *flowState, unsigned componentIndex) {
     Value connectionValue;
@@ -5168,7 +5164,7 @@ void executeMQTTDisconnectComponent(FlowState *flowState, unsigned componentInde
         throwError(flowState, componentIndex, FlowError::Plain(errorMessage));
         return;
     }
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
 void executeMQTTEventComponent(FlowState *flowState, unsigned componentIndex) {
     Value connectionValue;
@@ -5187,7 +5183,7 @@ void executeMQTTEventComponent(FlowState *flowState, unsigned componentIndex) {
         auto connectionArray = connectionValue.getArray();
         void *handle = connectionArray->values[defs_v3::OBJECT_TYPE_MQTT_CONNECTION_FIELD_ID].getVoidPointer();
         addConnectionEventHandler(handle, componentExecutionState);
-        propagateValueThroughSeqout(flowState, componentIndex);
+	    propagateValueThroughSeqout(flowState, componentIndex);
         addToQueue(flowState, componentIndex, -1, -1, -1, true);
     } else {
         auto event = componentExecutionState->removeEvent();
@@ -5256,7 +5252,7 @@ void executeMQTTUnsubscribeComponent(FlowState *flowState, unsigned componentInd
     propagateValueThroughSeqout(flowState, componentIndex);
 }
 void executeMQTTPublishComponent(FlowState *flowState, unsigned componentIndex) {
-    Value connectionValue;
+	Value connectionValue;
     if (!evalProperty(flowState, componentIndex, defs_v3::MQTT_PUBLISH_ACTION_COMPONENT_PROPERTY_CONNECTION, connectionValue, FlowError::Property("MQTTPublish", "Connection"))) {
         return;
     }
@@ -5291,13 +5287,15 @@ void executeMQTTPublishComponent(FlowState *flowState, unsigned componentIndex) 
     }
     propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 #ifdef EEZ_STUDIO_FLOW_RUNTIME
 #include <emscripten.h>
 extern "C" {
 int eez_mqtt_init(const char *protocol, const char *host, int port, const char *username, const char *password, void **handle) {
-    int id = EM_ASM_INT({ return eez_mqtt_init($0, UTF8ToString($1), UTF8ToString($2), $3, UTF8ToString($4), UTF8ToString($5)); }, eez::flow::g_wasmModuleId, protocol, host, port, username, password);
+    int id = EM_ASM_INT({
+        return eez_mqtt_init($0, UTF8ToString($1), UTF8ToString($2), $3, UTF8ToString($4), UTF8ToString($5));
+    }, eez::flow::g_wasmModuleId, protocol, host, port, username, password);
     if (id == 0) {
         return 1;
     }
@@ -5305,22 +5303,34 @@ int eez_mqtt_init(const char *protocol, const char *host, int port, const char *
     return MQTT_ERROR_OK;
 }
 int eez_mqtt_deinit(void *handle) {
-    return EM_ASM_INT({ return eez_mqtt_deinit($0, $1); }, eez::flow::g_wasmModuleId, handle);
+    return EM_ASM_INT({
+        return eez_mqtt_deinit($0, $1);
+    }, eez::flow::g_wasmModuleId, handle);
 }
 int eez_mqtt_connect(void *handle) {
-    return EM_ASM_INT({ return eez_mqtt_connect($0, $1); }, eez::flow::g_wasmModuleId, handle);
+    return EM_ASM_INT({
+        return eez_mqtt_connect($0, $1);
+    }, eez::flow::g_wasmModuleId, handle);
 }
 int eez_mqtt_disconnect(void *handle) {
-    return EM_ASM_INT({ return eez_mqtt_disconnect($0, $1); }, eez::flow::g_wasmModuleId, handle);
+    return EM_ASM_INT({
+        return eez_mqtt_disconnect($0, $1);
+    }, eez::flow::g_wasmModuleId, handle);
 }
 int eez_mqtt_subscribe(void *handle, const char *topic) {
-    return EM_ASM_INT({ return eez_mqtt_subscribe($0, $1, UTF8ToString($2)); }, eez::flow::g_wasmModuleId, handle, topic);
+    return EM_ASM_INT({
+        return eez_mqtt_subscribe($0, $1, UTF8ToString($2));
+    }, eez::flow::g_wasmModuleId, handle, topic);
 }
 int eez_mqtt_unsubscribe(void *handle, const char *topic) {
-    return EM_ASM_INT({ return eez_mqtt_unsubscribe($0, $1, UTF8ToString($2)); }, eez::flow::g_wasmModuleId, handle, topic);
+    return EM_ASM_INT({
+        return eez_mqtt_unsubscribe($0, $1, UTF8ToString($2));
+    }, eez::flow::g_wasmModuleId, handle, topic);
 }
 int eez_mqtt_publish(void *handle, const char *topic, const char *payload) {
-    return EM_ASM_INT({ return eez_mqtt_publish($0, $1, UTF8ToString($2), UTF8ToString($3)); }, eez::flow::g_wasmModuleId, handle, topic, payload);
+    return EM_ASM_INT({
+        return eez_mqtt_publish($0, $1, UTF8ToString($2), UTF8ToString($3));
+    }, eez::flow::g_wasmModuleId, handle, topic, payload);
 }
 }
 void eez_mqtt_on_event_callback(void *handle, EEZ_MQTT_Event event, void *eventData) {
@@ -5375,10 +5385,9 @@ void eez_mqtt_on_event_callback(void *handle, EEZ_MQTT_Event event, void *eventD
         }
     }
 }
-EM_PORT_API(void)
-onMqttEvent(void *handle, EEZ_MQTT_Event event, void *eventDataPtr1, void *eventDataPtr2) {
+EM_PORT_API(void) onMqttEvent(void *handle, EEZ_MQTT_Event event, void *eventDataPtr1, void *eventDataPtr2) {
     void *eventData;
-    if (eventDataPtr1 && eventDataPtr2) {
+    if (eventDataPtr1 && eventDataPtr2)  {
         EEZ_MQTT_MessageEvent eventData;
         eventData.topic = (const char *)eventDataPtr1;
         eventData.payload = (const char *)eventDataPtr2;
@@ -5436,10 +5445,10 @@ int eez_mqtt_publish(void *handle, const char *topic, const char *payload) {
 namespace eez {
 namespace flow {
 void executeNoopComponent(FlowState *flowState, unsigned componentIndex) {
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/on_event.cpp
 // -----------------------------------------------------------------------------
@@ -5447,44 +5456,44 @@ namespace eez {
 namespace flow {
 void executeOnEventComponent(FlowState *flowState, unsigned componentIndex) {
     propagateValue(flowState, componentIndex, 1, flowState->eventValue);
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/output.cpp
 // -----------------------------------------------------------------------------
 namespace eez {
 namespace flow {
 struct OutputActionComponent : public Component {
-    uint8_t outputIndex;
+	uint8_t outputIndex;
 };
 void executeOutputComponent(FlowState *flowState, unsigned componentIndex) {
     auto component = (OutputActionComponent *)flowState->flow->components[componentIndex];
-    if (!flowState->parentFlowState) {
-        throwError(flowState, componentIndex, FlowError::Plain("No parentFlowState in Output"));
-        return;
-    }
-    if (!flowState->parentComponent) {
-        throwError(flowState, componentIndex, FlowError::Plain("No parentComponent in Output"));
-        return;
-    }
+	if (!flowState->parentFlowState) {
+		throwError(flowState, componentIndex, FlowError::Plain("No parentFlowState in Output"));
+		return;
+	}
+	if (!flowState->parentComponent) {
+		throwError(flowState, componentIndex, FlowError::Plain("No parentComponent in Output"));
+		return;
+	}
     auto inputIndex = component->inputs[0];
     if (inputIndex >= flowState->flow->componentInputs.count) {
         throwError(flowState, componentIndex, FlowError::Plain("Invalid input index in Output"));
-        return;
-    }
+		return;
+	}
     auto value = flowState->values[inputIndex];
     auto callActionComponent = (CallActionActionComponent *)flowState->parentComponent;
     uint8_t parentComponentOutputIndex = callActionComponent->outputsStartIndex + component->outputIndex;
     if (parentComponentOutputIndex >= flowState->parentComponent->outputs.count) {
         throwError(flowState, componentIndex, FlowError::Plain("Output action component, invalid output index"));
-        return;
+		return;
     }
     propagateValue(flowState->parentFlowState, flowState->parentComponentIndex, parentComponentOutputIndex, value);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/select_language.cpp
 // -----------------------------------------------------------------------------
@@ -5493,16 +5502,16 @@ void executeOutputComponent(FlowState *flowState, unsigned componentIndex) {
 namespace eez {
 namespace flow {
 void executeSelectLanguageComponent(FlowState *flowState, unsigned componentIndex) {
-    Value languageValue;
-    if (!evalProperty(flowState, componentIndex, defs_v3::SELECT_LANGUAGE_ACTION_COMPONENT_PROPERTY_LANGUAGE, languageValue, FlowError::Property("SelectLanguage", "Language"))) {
-        return;
-    }
-    const char *language = languageValue.getString();
+	Value languageValue;
+	if (!evalProperty(flowState, componentIndex, defs_v3::SELECT_LANGUAGE_ACTION_COMPONENT_PROPERTY_LANGUAGE, languageValue, FlowError::Property("SelectLanguage", "Language"))) {
+		return;
+	}
+	const char *language = languageValue.getString();
     auto &languages = flowState->assets->languages;
     for (uint32_t languageIndex = 0; languageIndex < languages.count; languageIndex++) {
         if (strcmp(languages[languageIndex]->languageID, language) == 0) {
             g_selectedLanguage = languageIndex;
-            propagateValueThroughSeqout(flowState, componentIndex);
+	        propagateValueThroughSeqout(flowState, componentIndex);
             return;
         }
     }
@@ -5510,8 +5519,8 @@ void executeSelectLanguageComponent(FlowState *flowState, unsigned componentInde
     snprintf(message, sizeof(message), "Unknown language %s", language);
     throwError(flowState, componentIndex, FlowError::Plain(message));
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/set_color_theme.cpp
 // -----------------------------------------------------------------------------
@@ -5524,11 +5533,11 @@ void executeSelectLanguageComponent(FlowState *flowState, unsigned componentInde
 namespace eez {
 namespace flow {
 void executeSetColorThemeComponent(FlowState *flowState, unsigned componentIndex) {
-    Value themeValue;
-    if (!evalProperty(flowState, componentIndex, defs_v3::SET_COLOR_THEME_ACTION_COMPONENT_PROPERTY_THEME, themeValue, FlowError::Property("SetColorTheme", "Theme"))) {
-        return;
-    }
-    const char *theme = themeValue.getString();
+	Value themeValue;
+	if (!evalProperty(flowState, componentIndex, defs_v3::SET_COLOR_THEME_ACTION_COMPONENT_PROPERTY_THEME, themeValue, FlowError::Property("SetColorTheme", "Theme"))) {
+		return;
+	}
+	const char *theme = themeValue.getString();
 #if defined(EEZ_FOR_LVGL)
     lvglSetColorThemeHook(theme);
 #elif EEZ_OPTION_GUI
@@ -5538,7 +5547,7 @@ void executeSetColorThemeComponent(FlowState *flowState, unsigned componentIndex
         propagateValueThroughSeqout(flowState, componentIndex);
     } else {
 #endif
-        auto &themes = flowState->assets->colorsDefinition->themes;
+    	auto &themes = flowState->assets->colorsDefinition->themes;
         for (uint32_t themeIndex = 0; themeIndex < themes.count; themeIndex++) {
             if (strcmp(themes[themeIndex]->name, theme) == 0) {
                 eez::gui::g_selectedThemeIndex = themeIndex;
@@ -5555,8 +5564,8 @@ void executeSetColorThemeComponent(FlowState *flowState, unsigned componentIndex
 #endif
 #endif
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/set_variable.cpp
 // -----------------------------------------------------------------------------
@@ -5577,30 +5586,30 @@ void executeSetVariableComponent(FlowState *flowState, unsigned componentIndex) 
         }
         assignValue(flowState, componentIndex, dstValue, srcValue);
     }
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/show_page.cpp
 // -----------------------------------------------------------------------------
 namespace eez {
 namespace flow {
 struct ShowPageActionComponent : public Component {
-    int16_t page;
+	int16_t page;
 };
 void executeShowPageComponent(FlowState *flowState, unsigned componentIndex) {
-    auto component = (ShowPageActionComponent *)flowState->flow->components[componentIndex];
-    replacePageHook(component->page, 0, 0, 0);
-    propagateValueThroughSeqout(flowState, componentIndex);
+	auto component = (ShowPageActionComponent *)flowState->flow->components[componentIndex];
+	replacePageHook(component->page, 0, 0, 0);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/sort_array.cpp
 // -----------------------------------------------------------------------------
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 namespace eez {
 namespace flow {
 SortArrayActionComponent *g_sortArrayActionComponent;
@@ -5643,8 +5652,7 @@ static int elementCompare(const void *a, const void *b) {
             return 0;
         }
         auto diff = aDouble - bDouble;
-        result = diff < 0 ? -1 : diff > 0 ? 1
-                                          : 0;
+        result = diff < 0 ? -1 : diff > 0 ? 1 : 0;
     }
     if (!(g_sortArrayActionComponent->flags & SORT_ARRAY_FLAG_ASCENDING)) {
         result = -result;
@@ -5682,20 +5690,20 @@ void executeSortArrayComponent(FlowState *flowState, unsigned componentIndex) {
         }
     }
     sortArray(component, array);
-    propagateValue(flowState, componentIndex, component->outputs.count - 1, arrayValue);
+	propagateValue(flowState, componentIndex, component->outputs.count - 1, arrayValue);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/start.cpp
 // -----------------------------------------------------------------------------
 namespace eez {
 namespace flow {
 void executeStartComponent(FlowState *flowState, unsigned componentIndex) {
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/switch.cpp
 // -----------------------------------------------------------------------------
@@ -5725,10 +5733,10 @@ void executeSwitchComponent(FlowState *flowState, unsigned componentIndex) {
             break;
         }
     }
-    propagateValueThroughSeqout(flowState, componentIndex);
+	propagateValueThroughSeqout(flowState, componentIndex);
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/test_and_set.cpp
 // -----------------------------------------------------------------------------
@@ -5750,8 +5758,8 @@ void executeTestAndSetComponent(FlowState *flowState, unsigned componentIndex) {
         addToQueue(flowState, componentIndex, -1, -1, -1, true);
     }
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/components/watch_variable.cpp
 // -----------------------------------------------------------------------------
@@ -5759,29 +5767,29 @@ void executeTestAndSetComponent(FlowState *flowState, unsigned componentIndex) {
 namespace eez {
 namespace flow {
 struct WatchVariableComponenentExecutionState : public ComponenentExecutionState {
-    Value value;
+	Value value;
     WatchListNode *node;
 };
 void executeWatchVariableComponent(FlowState *flowState, unsigned componentIndex) {
-    auto watchVariableComponentExecutionState = (WatchVariableComponenentExecutionState *)flowState->componenentExecutionStates[componentIndex];
+	auto watchVariableComponentExecutionState = (WatchVariableComponenentExecutionState *)flowState->componenentExecutionStates[componentIndex];
     Value value;
     if (!evalProperty(flowState, componentIndex, defs_v3::WATCH_VARIABLE_ACTION_COMPONENT_PROPERTY_VARIABLE, value, FlowError::Property("WatchVariable", "Variable"))) {
         return;
     }
-    if (!watchVariableComponentExecutionState) {
+	if (!watchVariableComponentExecutionState) {
         watchVariableComponentExecutionState = allocateComponentExecutionState<WatchVariableComponenentExecutionState>(flowState, componentIndex);
         watchVariableComponentExecutionState->value = value.type == VALUE_TYPE_STRING ? value.clone() : value;
         watchVariableComponentExecutionState->node = watchListAdd(flowState, componentIndex);
         propagateValue(flowState, componentIndex, 1, value);
-    } else {
-        if (value != watchVariableComponentExecutionState->value) {
+	} else {
+		if (value != watchVariableComponentExecutionState->value) {
             watchVariableComponentExecutionState->value = value.type == VALUE_TYPE_STRING ? value.clone() : value;
-            propagateValue(flowState, componentIndex, 1, value);
-        }
-    }
+			propagateValue(flowState, componentIndex, 1, value);
+		}
+	}
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/date.cpp
 // -----------------------------------------------------------------------------
@@ -5792,33 +5800,12 @@ namespace date {
 #define SECONDS_PER_MINUTE 60UL
 #define SECONDS_PER_HOUR (SECONDS_PER_MINUTE * 60)
 #define SECONDS_PER_DAY (SECONDS_PER_HOUR * 24)
-#define LEAP_YEAR(Y) \
+#define LEAP_YEAR(Y)                                                                               \
     (((1970 + Y) > 0) && !((1970 + Y) % 4) && (((1970 + Y) % 100) || !((1970 + Y) % 400)))
-static const uint8_t monthDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-enum Week { Last,
-            First,
-            Second,
-            Third,
-            Fourth };
-enum DayOfWeek { Sun = 1,
-                 Mon,
-                 Tue,
-                 Wed,
-                 Thu,
-                 Fri,
-                 Sat };
-enum Month { Jan = 1,
-             Feb,
-             Mar,
-             Apr,
-             May,
-             Jun,
-             Jul,
-             Aug,
-             Sep,
-             Oct,
-             Nov,
-             Dec };
+static const uint8_t monthDays[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+enum Week { Last, First, Second, Third, Fourth };
+enum DayOfWeek { Sun = 1, Mon, Tue, Wed, Thu, Fri, Sat };
+enum Month { Jan = 1, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec };
 struct TimeChangeRule {
     Week week;
     DayOfWeek dow;
@@ -5829,9 +5816,9 @@ static struct {
     TimeChangeRule dstStart;
     TimeChangeRule dstEnd;
 } g_dstRules[] = {
-    {{Last, Sun, Mar, 2}, {Last, Sun, Oct, 3}},
-    {{Second, Sun, Mar, 2}, {First, Sun, Nov, 2}},
-    {{First, Sun, Oct, 2}, {First, Sun, Apr, 3}},
+    { { Last, Sun, Mar, 2 }, { Last, Sun, Oct, 3 } },    
+    { { Second, Sun, Mar, 2 }, { First, Sun, Nov, 2 } }, 
+    { { First, Sun, Oct, 2 }, { First, Sun, Apr, 3 } },  
 };
 Format g_localeFormat = FORMAT_DMY_24;
 int g_timeZone = 0;
@@ -5875,14 +5862,14 @@ Date makeDate(int year, int month, int day, int hours, int minutes, int seconds,
     Date time = year * 365 * SECONDS_PER_DAY;
     for (int i = 0; i < year; i++) {
         if (LEAP_YEAR(i)) {
-            time += SECONDS_PER_DAY;
+            time += SECONDS_PER_DAY; 
         }
     }
     for (int i = 1; i < month; i++) {
         if ((i == 2) && LEAP_YEAR(year)) {
             time += SECONDS_PER_DAY * 29;
         } else {
-            time += SECONDS_PER_DAY * monthDays[i - 1];
+            time += SECONDS_PER_DAY * monthDays[i - 1]; 
         }
     }
     time += (day - 1) * SECONDS_PER_DAY;
@@ -5898,26 +5885,26 @@ void breakDate(Date time, int &result_year, int &result_month, int &result_day, 
     uint8_t month, monthLength;
     uint32_t days;
     result_milliseconds = time % 1000;
-    time /= 1000;
+    time /= 1000; 
     result_seconds = time % 60;
-    time /= 60;
+    time /= 60; 
     result_minutes = time % 60;
-    time /= 60;
+    time /= 60; 
     result_hours = time % 24;
-    time /= 24;
+    time /= 24; 
     year = 0;
     days = 0;
     while ((unsigned)(days += (LEAP_YEAR(year) ? 366 : 365)) <= time) {
         year++;
     }
-    result_year = year + 1970;
+    result_year = year + 1970; 
     days -= LEAP_YEAR(year) ? 366 : 365;
-    time -= days;
+    time -= days; 
     days = 0;
     month = 0;
     monthLength = 0;
     for (month = 0; month < 12; ++month) {
-        if (month == 1) {
+        if (month == 1) { 
             if (LEAP_YEAR(year)) {
                 monthLength = 29;
             } else {
@@ -5932,8 +5919,8 @@ void breakDate(Date time, int &result_year, int &result_month, int &result_day, 
             break;
         }
     }
-    result_month = month + 1;
-    result_day = time + 1;
+    result_month = month + 1; 
+    result_day = time + 1;    
 }
 int getYear(Date time) {
     int year, month, day, hours, minutes, seconds, milliseconds;
@@ -6009,7 +5996,7 @@ static bool isDst(Date local, DstRule dstRule) {
            (dstStart > dstEnd && (local >= dstStart || local < dstEnd));
 }
 static uint8_t dayOfWeek(int y, int m, int d) {
-    static int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+    static int t[] = { 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4 };
     if (m < 3) {
         --y;
     }
@@ -6018,65 +6005,65 @@ static uint8_t dayOfWeek(int y, int m, int d) {
 static Date timeChangeRuleToLocal(TimeChangeRule &r, int year) {
     uint8_t month = r.month;
     uint8_t week = r.week;
-    if (week == 0) {
-        if (++month > 12) {
+    if (week == 0) {        
+        if (++month > 12) { 
             month = 1;
             ++year;
         }
-        week = 1;
+        week = 1; 
     }
     Date time = makeDate(year, month, 1, r.hours, 0, 0, 0);
     uint8_t dow = dayOfWeek(year, month, 1);
     time += (7 * (week - 1) + (r.dow - dow + 7) % 7) * SECONDS_PER_DAY;
     if (r.week == 0) {
-        time -= 7 * SECONDS_PER_DAY;
+        time -= 7 * SECONDS_PER_DAY; 
     }
     return time;
 }
-} // namespace date
-} // namespace flow
-} // namespace eez
+} 
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/debugger.cpp
 // -----------------------------------------------------------------------------
 #include <assert.h>
-#include <inttypes.h>
-#include <stdio.h>
 #include <string.h>
+#include <stdio.h>
+#include <inttypes.h>
 namespace eez {
 namespace flow {
 #define MAX_ARRAY_SIZE_TRANSFERRED_IN_DEBUGGER 1000
 enum MessagesToDebugger {
-    MESSAGE_TO_DEBUGGER_STATE_CHANGED,
-    MESSAGE_TO_DEBUGGER_ADD_TO_QUEUE,
-    MESSAGE_TO_DEBUGGER_REMOVE_FROM_QUEUE,
-    MESSAGE_TO_DEBUGGER_GLOBAL_VARIABLE_INIT,
-    MESSAGE_TO_DEBUGGER_LOCAL_VARIABLE_INIT,
-    MESSAGE_TO_DEBUGGER_COMPONENT_INPUT_INIT,
-    MESSAGE_TO_DEBUGGER_VALUE_CHANGED,
-    MESSAGE_TO_DEBUGGER_FLOW_STATE_CREATED,
-    MESSAGE_TO_DEBUGGER_FLOW_STATE_TIMELINE_CHANGED,
-    MESSAGE_TO_DEBUGGER_FLOW_STATE_DESTROYED,
-    MESSAGE_TO_DEBUGGER_FLOW_STATE_ERROR,
-    MESSAGE_TO_DEBUGGER_LOG,
-    MESSAGE_TO_DEBUGGER_PAGE_CHANGED,
-    MESSAGE_TO_DEBUGGER_COMPONENT_EXECUTION_STATE_CHANGED,
-    MESSAGE_TO_DEBUGGER_COMPONENT_ASYNC_STATE_CHANGED
+    MESSAGE_TO_DEBUGGER_STATE_CHANGED, 
+    MESSAGE_TO_DEBUGGER_ADD_TO_QUEUE, 
+    MESSAGE_TO_DEBUGGER_REMOVE_FROM_QUEUE, 
+    MESSAGE_TO_DEBUGGER_GLOBAL_VARIABLE_INIT, 
+    MESSAGE_TO_DEBUGGER_LOCAL_VARIABLE_INIT, 
+    MESSAGE_TO_DEBUGGER_COMPONENT_INPUT_INIT, 
+    MESSAGE_TO_DEBUGGER_VALUE_CHANGED, 
+    MESSAGE_TO_DEBUGGER_FLOW_STATE_CREATED, 
+    MESSAGE_TO_DEBUGGER_FLOW_STATE_TIMELINE_CHANGED, 
+    MESSAGE_TO_DEBUGGER_FLOW_STATE_DESTROYED, 
+	MESSAGE_TO_DEBUGGER_FLOW_STATE_ERROR, 
+    MESSAGE_TO_DEBUGGER_LOG, 
+	MESSAGE_TO_DEBUGGER_PAGE_CHANGED, 
+    MESSAGE_TO_DEBUGGER_COMPONENT_EXECUTION_STATE_CHANGED, 
+    MESSAGE_TO_DEBUGGER_COMPONENT_ASYNC_STATE_CHANGED 
 };
 enum MessagesFromDebugger {
-    MESSAGE_FROM_DEBUGGER_RESUME,
-    MESSAGE_FROM_DEBUGGER_PAUSE,
-    MESSAGE_FROM_DEBUGGER_SINGLE_STEP,
-    MESSAGE_FROM_DEBUGGER_ADD_BREAKPOINT,
-    MESSAGE_FROM_DEBUGGER_REMOVE_BREAKPOINT,
-    MESSAGE_FROM_DEBUGGER_ENABLE_BREAKPOINT,
-    MESSAGE_FROM_DEBUGGER_DISABLE_BREAKPOINT,
-    MESSAGE_FROM_DEBUGGER_MODE
+    MESSAGE_FROM_DEBUGGER_RESUME, 
+    MESSAGE_FROM_DEBUGGER_PAUSE, 
+    MESSAGE_FROM_DEBUGGER_SINGLE_STEP, 
+    MESSAGE_FROM_DEBUGGER_ADD_BREAKPOINT, 
+    MESSAGE_FROM_DEBUGGER_REMOVE_BREAKPOINT, 
+    MESSAGE_FROM_DEBUGGER_ENABLE_BREAKPOINT, 
+    MESSAGE_FROM_DEBUGGER_DISABLE_BREAKPOINT, 
+    MESSAGE_FROM_DEBUGGER_MODE 
 };
 enum LogItemType {
-    LOG_ITEM_TYPE_FATAL,
-    LOG_ITEM_TYPE_ERROR,
-    LOG_ITEM_TYPE_WARNING,
+	LOG_ITEM_TYPE_FATAL,
+	LOG_ITEM_TYPE_ERROR,
+    LOG_ITEM_TYPE_WARNING ,
     LOG_ITEM_TYPE_SCPI,
     LOG_ITEM_TYPE_INFO,
     LOG_ITEM_TYPE_DEBUG
@@ -6105,21 +6092,22 @@ static bool isSubscribedTo(MessagesToDebugger messageType) {
     return false;
 }
 static void setDebuggerState(DebuggerState newState) {
-    if (newState != g_debuggerState) {
-        g_debuggerState = newState;
-        if (isSubscribedTo(MESSAGE_TO_DEBUGGER_STATE_CHANGED)) {
-            char buffer[256];
-            snprintf(buffer, sizeof(buffer), "%d\t%d\n",
-                     MESSAGE_TO_DEBUGGER_STATE_CHANGED,
-                     g_debuggerState);
-            writeDebuggerBufferHook(buffer, strlen(buffer));
-        }
-    }
+	if (newState != g_debuggerState) {
+		g_debuggerState = newState;
+		if (isSubscribedTo(MESSAGE_TO_DEBUGGER_STATE_CHANGED)) {
+			char buffer[256];
+			snprintf(buffer, sizeof(buffer), "%d\t%d\n",
+				MESSAGE_TO_DEBUGGER_STATE_CHANGED,
+				g_debuggerState
+			);
+			writeDebuggerBufferHook(buffer, strlen(buffer));
+		}
+	}
 }
 void onDebuggerClientConnected() {
     g_debuggerIsConnected = true;
-    g_skipNextBreakpoint = false;
-    g_inputFromDebuggerPosition = 0;
+	g_skipNextBreakpoint = false;
+	g_inputFromDebuggerPosition = 0;
     setDebuggerState(DEBUGGER_STATE_PAUSED);
 }
 void onDebuggerClientDisconnected() {
@@ -6127,52 +6115,51 @@ void onDebuggerClientDisconnected() {
     setDebuggerState(DEBUGGER_STATE_RESUMED);
 }
 void processDebuggerInput(char *buffer, uint32_t length) {
-    for (uint32_t i = 0; i < length; i++) {
-        if (buffer[i] == '\n') {
-            int messageFromDebugger = g_inputFromDebugger[0] - '0';
-            if (messageFromDebugger == MESSAGE_FROM_DEBUGGER_RESUME) {
-                setDebuggerState(DEBUGGER_STATE_RESUMED);
-            } else if (messageFromDebugger == MESSAGE_FROM_DEBUGGER_PAUSE) {
-                setDebuggerState(DEBUGGER_STATE_PAUSED);
-            } else if (messageFromDebugger == MESSAGE_FROM_DEBUGGER_SINGLE_STEP) {
-                setDebuggerState(DEBUGGER_STATE_SINGLE_STEP);
-            } else if (
-                messageFromDebugger >= MESSAGE_FROM_DEBUGGER_ADD_BREAKPOINT &&
-                messageFromDebugger <= MESSAGE_FROM_DEBUGGER_DISABLE_BREAKPOINT) {
-                char *p;
-                auto flowIndex = (uint32_t)strtol(g_inputFromDebugger + 2, &p, 10);
-                auto componentIndex = (uint32_t)strtol(p + 1, nullptr, 10);
-                auto assets = g_firstFlowState->assets;
-                auto flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
-                if (flowIndex < flowDefinition->flows.count) {
-                    auto flow = flowDefinition->flows[flowIndex];
-                    if (componentIndex < flow->components.count) {
-                        auto component = flow->components[componentIndex];
-                        component->breakpoint = messageFromDebugger == MESSAGE_FROM_DEBUGGER_ADD_BREAKPOINT ||
-                                                        messageFromDebugger == MESSAGE_FROM_DEBUGGER_ENABLE_BREAKPOINT
-                                                    ? 1
-                                                    : 0;
-                    } else {
-                        ErrorTrace("Invalid breakpoint component index\n");
-                    }
-                } else {
-                    ErrorTrace("Invalid breakpoint flow index\n");
-                }
-            } else if (messageFromDebugger == MESSAGE_FROM_DEBUGGER_MODE) {
+	for (uint32_t i = 0; i < length; i++) {
+		if (buffer[i] == '\n') {
+			int messageFromDebugger = g_inputFromDebugger[0] - '0';
+			if (messageFromDebugger == MESSAGE_FROM_DEBUGGER_RESUME) {
+				setDebuggerState(DEBUGGER_STATE_RESUMED);
+			} else if (messageFromDebugger == MESSAGE_FROM_DEBUGGER_PAUSE) {
+				setDebuggerState(DEBUGGER_STATE_PAUSED);
+			} else if (messageFromDebugger == MESSAGE_FROM_DEBUGGER_SINGLE_STEP) {
+				setDebuggerState(DEBUGGER_STATE_SINGLE_STEP);
+			} else if (
+				messageFromDebugger >= MESSAGE_FROM_DEBUGGER_ADD_BREAKPOINT &&
+				messageFromDebugger <= MESSAGE_FROM_DEBUGGER_DISABLE_BREAKPOINT
+			) {
+				char *p;
+				auto flowIndex = (uint32_t)strtol(g_inputFromDebugger + 2, &p, 10);
+				auto componentIndex = (uint32_t)strtol(p + 1, nullptr, 10);
+				auto assets = g_firstFlowState->assets;
+				auto flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
+				if (flowIndex < flowDefinition->flows.count) {
+					auto flow = flowDefinition->flows[flowIndex];
+					if (componentIndex < flow->components.count) {
+						auto component = flow->components[componentIndex];
+						component->breakpoint = messageFromDebugger == MESSAGE_FROM_DEBUGGER_ADD_BREAKPOINT ||
+							messageFromDebugger == MESSAGE_FROM_DEBUGGER_ENABLE_BREAKPOINT ? 1 : 0;
+					} else {
+						ErrorTrace("Invalid breakpoint component index\n");
+					}
+				} else {
+					ErrorTrace("Invalid breakpoint flow index\n");
+				}
+			} else if (messageFromDebugger == MESSAGE_FROM_DEBUGGER_MODE) {
                 g_debuggerMode = strtol(g_inputFromDebugger + 2, nullptr, 10);
 #if EEZ_OPTION_GUI
                 gui::refreshScreen();
 #endif
             }
-            g_inputFromDebuggerPosition = 0;
-        } else {
-            if (g_inputFromDebuggerPosition < sizeof(g_inputFromDebugger)) {
-                g_inputFromDebugger[g_inputFromDebuggerPosition++] = buffer[i];
-            } else if (g_inputFromDebuggerPosition == sizeof(g_inputFromDebugger)) {
-                ErrorTrace("Input from debugger buffer overflow\n");
-            }
-        }
-    }
+			g_inputFromDebuggerPosition = 0;
+		} else {
+			if (g_inputFromDebuggerPosition < sizeof(g_inputFromDebugger)) {
+				g_inputFromDebugger[g_inputFromDebuggerPosition++] = buffer[i];
+			} else if (g_inputFromDebuggerPosition == sizeof(g_inputFromDebugger)) {
+				ErrorTrace("Input from debugger buffer overflow\n");
+			}
+		}
+	}
 }
 bool canExecuteStep(FlowState *&flowState, unsigned &componentIndex) {
     if (!g_debuggerIsConnected) {
@@ -6186,7 +6173,7 @@ bool canExecuteStep(FlowState *&flowState, unsigned &componentIndex) {
     }
     if (g_debuggerState == DEBUGGER_STATE_SINGLE_STEP) {
         g_skipNextBreakpoint = false;
-        setDebuggerState(DEBUGGER_STATE_PAUSED);
+	    setDebuggerState(DEBUGGER_STATE_PAUSED);
         return true;
     }
     auto component = flowState->flow->components[componentIndex];
@@ -6197,7 +6184,7 @@ bool canExecuteStep(FlowState *&flowState, unsigned &componentIndex) {
     } else {
         if (component->breakpoint) {
             g_skipNextBreakpoint = true;
-            setDebuggerState(DEBUGGER_STATE_PAUSED);
+			setDebuggerState(DEBUGGER_STATE_PAUSED);
             return false;
         }
     }
@@ -6209,27 +6196,27 @@ char outputBuffer[1024 * 1024];
 char outputBuffer[64];
 #endif
 int outputBufferPosition = 0;
-#define WRITE_TO_OUTPUT_BUFFER(ch)                                   \
-    outputBuffer[outputBufferPosition++] = ch;                       \
-    if (outputBufferPosition == sizeof(outputBuffer)) {              \
-        writeDebuggerBufferHook(outputBuffer, outputBufferPosition); \
-        outputBufferPosition = 0;                                    \
-    }
-#define FLUSH_OUTPUT_BUFFER()                                        \
-    if (outputBufferPosition > 0) {                                  \
-        writeDebuggerBufferHook(outputBuffer, outputBufferPosition); \
-        outputBufferPosition = 0;                                    \
-    }
+#define WRITE_TO_OUTPUT_BUFFER(ch) \
+	outputBuffer[outputBufferPosition++] = ch; \
+	if (outputBufferPosition == sizeof(outputBuffer)) { \
+		writeDebuggerBufferHook(outputBuffer, outputBufferPosition); \
+		outputBufferPosition = 0; \
+	}
+#define FLUSH_OUTPUT_BUFFER() \
+	if (outputBufferPosition > 0) { \
+		writeDebuggerBufferHook(outputBuffer, outputBufferPosition); \
+		outputBufferPosition = 0; \
+	}
 static void writeValueAddr(const void *pValue) {
-    char tmpStr[32];
-    snprintf(tmpStr, sizeof(tmpStr), "%p", pValue);
-    auto len = strlen(tmpStr);
-    for (size_t i = 0; i < len; i++) {
-        WRITE_TO_OUTPUT_BUFFER(tmpStr[i]);
-    }
+	char tmpStr[32];
+	snprintf(tmpStr, sizeof(tmpStr), "%p", pValue);
+	auto len = strlen(tmpStr);
+	for (size_t i = 0; i < len; i++) {
+		WRITE_TO_OUTPUT_BUFFER(tmpStr[i]);
+	}
 }
 static void writeString(const char *str) {
-    WRITE_TO_OUTPUT_BUFFER('"');
+	WRITE_TO_OUTPUT_BUFFER('"');
     while (true) {
         utf8_int32_t cp;
         str = utf8codepoint(str, &cp);
@@ -6237,51 +6224,51 @@ static void writeString(const char *str) {
             break;
         }
         if (cp == '"') {
-            WRITE_TO_OUTPUT_BUFFER('\\');
-            WRITE_TO_OUTPUT_BUFFER('"');
-        } else if (cp == '\t') {
-            WRITE_TO_OUTPUT_BUFFER('\\');
-            WRITE_TO_OUTPUT_BUFFER('t');
-        } else if (cp == '\n') {
-            WRITE_TO_OUTPUT_BUFFER('\\');
-            WRITE_TO_OUTPUT_BUFFER('n');
-        } else if (cp >= 32 && cp < 127) {
-            WRITE_TO_OUTPUT_BUFFER(cp);
+			WRITE_TO_OUTPUT_BUFFER('\\');
+			WRITE_TO_OUTPUT_BUFFER('"');
+		} else if (cp == '\t') {
+			WRITE_TO_OUTPUT_BUFFER('\\');
+			WRITE_TO_OUTPUT_BUFFER('t');
+		} else if (cp == '\n') {
+			WRITE_TO_OUTPUT_BUFFER('\\');
+			WRITE_TO_OUTPUT_BUFFER('n');
+		} else if (cp >= 32 && cp < 127) {
+			WRITE_TO_OUTPUT_BUFFER(cp);
         } else {
             char temp[32];
             snprintf(temp, sizeof(temp), "\\u%04x", (int)cp);
             for (size_t i = 0; i < strlen(temp); i++) {
-                WRITE_TO_OUTPUT_BUFFER(temp[i]);
+			    WRITE_TO_OUTPUT_BUFFER(temp[i]);
             }
         }
     }
-    WRITE_TO_OUTPUT_BUFFER('"');
-    WRITE_TO_OUTPUT_BUFFER('\n');
-    FLUSH_OUTPUT_BUFFER();
+	WRITE_TO_OUTPUT_BUFFER('"');
+	WRITE_TO_OUTPUT_BUFFER('\n');
+	FLUSH_OUTPUT_BUFFER();
 }
 static void writeArrayType(uint32_t arrayType) {
-    char tmpStr[32];
-    snprintf(tmpStr, sizeof(tmpStr), "%x", (int)arrayType);
-    auto len = strlen(tmpStr);
-    for (size_t i = 0; i < len; i++) {
-        WRITE_TO_OUTPUT_BUFFER(tmpStr[i]);
-    }
+	char tmpStr[32];
+	snprintf(tmpStr, sizeof(tmpStr), "%x", (int)arrayType);
+	auto len = strlen(tmpStr);
+	for (size_t i = 0; i < len; i++) {
+		WRITE_TO_OUTPUT_BUFFER(tmpStr[i]);
+	}
 }
 static void writeArray(const ArrayValue *arrayValue) {
-    WRITE_TO_OUTPUT_BUFFER('{');
-    writeValueAddr(arrayValue);
+	WRITE_TO_OUTPUT_BUFFER('{');
+	writeValueAddr(arrayValue);
     WRITE_TO_OUTPUT_BUFFER(',');
     writeArrayType(arrayValue->arraySize);
     WRITE_TO_OUTPUT_BUFFER(',');
     writeArrayType(arrayValue->arrayType);
     auto transferredSize = arrayValue->arraySize > MAX_ARRAY_SIZE_TRANSFERRED_IN_DEBUGGER ? MAX_ARRAY_SIZE_TRANSFERRED_IN_DEBUGGER : arrayValue->arraySize;
-    for (uint32_t i = 0; i < transferredSize; i++) {
-        WRITE_TO_OUTPUT_BUFFER(',');
-        writeValueAddr(&arrayValue->values[i]);
-    }
-    WRITE_TO_OUTPUT_BUFFER('}');
-    WRITE_TO_OUTPUT_BUFFER('\n');
-    FLUSH_OUTPUT_BUFFER();
+	for (uint32_t i = 0; i < transferredSize; i++) {
+		WRITE_TO_OUTPUT_BUFFER(',');
+		writeValueAddr(&arrayValue->values[i]);
+	}
+	WRITE_TO_OUTPUT_BUFFER('}');
+	WRITE_TO_OUTPUT_BUFFER('\n');
+	FLUSH_OUTPUT_BUFFER();
     for (uint32_t i = 0; i < transferredSize; i++) {
         onValueChanged(&arrayValue->values[i]);
     }
@@ -6295,112 +6282,113 @@ static void writeHex(char *dst, uint8_t *src, size_t srcLength) {
     *dst++ = 0;
 }
 static void writeValue(const Value &value) {
-    char tempStr[64];
+	char tempStr[64];
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4474)
 #endif
-    switch (value.getType()) {
-    case VALUE_TYPE_UNDEFINED:
-        stringCopy(tempStr, sizeof(tempStr) - 1, "undefined");
-        break;
-    case VALUE_TYPE_NULL:
-        stringCopy(tempStr, sizeof(tempStr) - 1, "null");
-        break;
-    case VALUE_TYPE_BOOLEAN:
-        stringCopy(tempStr, sizeof(tempStr) - 1, value.getBoolean() ? "true" : "false");
-        break;
-    case VALUE_TYPE_INT8:
-        snprintf(tempStr, sizeof(tempStr) - 1, "%" PRId8 "", value.int8Value);
-        break;
-    case VALUE_TYPE_UINT8:
-        snprintf(tempStr, sizeof(tempStr) - 1, "%" PRIu8 "", value.uint8Value);
-        break;
-    case VALUE_TYPE_INT16:
-        snprintf(tempStr, sizeof(tempStr) - 1, "%" PRId16 "", value.int16Value);
-        break;
-    case VALUE_TYPE_UINT16:
-        snprintf(tempStr, sizeof(tempStr) - 1, "%" PRIu16 "", value.uint16Value);
-        break;
-    case VALUE_TYPE_INT32:
-        snprintf(tempStr, sizeof(tempStr) - 1, "%" PRId32 "", value.int32Value);
-        break;
-    case VALUE_TYPE_UINT32:
-        snprintf(tempStr, sizeof(tempStr) - 1, "%" PRIu32 "", value.uint32Value);
-        break;
-    case VALUE_TYPE_INT64:
+	switch (value.getType()) {
+	case VALUE_TYPE_UNDEFINED:
+		stringCopy(tempStr, sizeof(tempStr) - 1, "undefined");
+		break;
+	case VALUE_TYPE_NULL:
+		stringCopy(tempStr, sizeof(tempStr) - 1, "null");
+		break;
+	case VALUE_TYPE_BOOLEAN:
+		stringCopy(tempStr, sizeof(tempStr) - 1, value.getBoolean() ? "true" : "false");
+		break;
+	case VALUE_TYPE_INT8:
+		snprintf(tempStr, sizeof(tempStr) - 1, "%" PRId8 "", value.int8Value);
+		break;
+	case VALUE_TYPE_UINT8:
+		snprintf(tempStr, sizeof(tempStr) - 1, "%" PRIu8 "", value.uint8Value);
+		break;
+	case VALUE_TYPE_INT16:
+		snprintf(tempStr, sizeof(tempStr) - 1, "%" PRId16 "", value.int16Value);
+		break;
+	case VALUE_TYPE_UINT16:
+		snprintf(tempStr, sizeof(tempStr) - 1, "%" PRIu16 "", value.uint16Value);
+		break;
+	case VALUE_TYPE_INT32:
+		snprintf(tempStr, sizeof(tempStr) - 1, "%" PRId32 "", value.int32Value);
+		break;
+	case VALUE_TYPE_UINT32:
+		snprintf(tempStr, sizeof(tempStr) - 1, "%" PRIu32 "", value.uint32Value);
+		break;
+	case VALUE_TYPE_INT64:
 #ifdef PRId64
-        snprintf(tempStr, sizeof(tempStr) - 1, "%" PRId64 "", value.int64Value);
+		snprintf(tempStr, sizeof(tempStr) - 1, "%" PRId64 "", value.int64Value);
 #else
-        snprintf(tempStr, sizeof(tempStr) - 1, "%" PRId32 "", (int32_t)value.int64Value);
+		snprintf(tempStr, sizeof(tempStr) - 1, "%" PRId32 "", (int32_t)value.int64Value);
 #endif
-        break;
-    case VALUE_TYPE_UINT64:
+		break;
+	case VALUE_TYPE_UINT64:
 #ifdef PRIu64
-        snprintf(tempStr, sizeof(tempStr) - 1, "%" PRIu64 "", value.uint64Value);
+		snprintf(tempStr, sizeof(tempStr) - 1, "%" PRIu64 "", value.uint64Value);
 #else
-        snprintf(tempStr, sizeof(tempStr) - 1, "%" PRIu32 "", (uint32_t)value.uint64Value);
+		snprintf(tempStr, sizeof(tempStr) - 1, "%" PRIu32 "", (uint32_t)value.uint64Value);
 #endif
-        break;
-    case VALUE_TYPE_DOUBLE:
+		break;
+	case VALUE_TYPE_DOUBLE:
         writeHex(tempStr, (uint8_t *)&value.doubleValue, sizeof(double));
-        break;
-    case VALUE_TYPE_FLOAT:
+		break;
+	case VALUE_TYPE_FLOAT:
         writeHex(tempStr, (uint8_t *)&value.floatValue, sizeof(float));
-        break;
-    case VALUE_TYPE_STRING:
+		break;
+	case VALUE_TYPE_STRING:
     case VALUE_TYPE_STRING_ASSET:
-    case VALUE_TYPE_STRING_REF:
-        writeString(value.getString());
-        return;
-    case VALUE_TYPE_ARRAY:
+	case VALUE_TYPE_STRING_REF:
+		writeString(value.getString());
+		return;
+	case VALUE_TYPE_ARRAY:
     case VALUE_TYPE_ARRAY_ASSET:
-    case VALUE_TYPE_ARRAY_REF:
-        writeArray(value.getArray());
-        return;
-    case VALUE_TYPE_BLOB_REF:
-        snprintf(tempStr, sizeof(tempStr) - 1, "@%d", (int)((BlobRef *)value.refValue)->len);
-        break;
-    case VALUE_TYPE_STREAM:
-        snprintf(tempStr, sizeof(tempStr) - 1, ">%d", (int)(value.int32Value));
-        break;
-    case VALUE_TYPE_JSON:
-        snprintf(tempStr, sizeof(tempStr) - 1, "#%d", (int)(value.int32Value));
-        break;
-    case VALUE_TYPE_DATE:
+	case VALUE_TYPE_ARRAY_REF:
+		writeArray(value.getArray());
+		return;
+	case VALUE_TYPE_BLOB_REF:
+		snprintf(tempStr, sizeof(tempStr) - 1, "@%d", (int)((BlobRef *)value.refValue)->len);
+		break;
+	case VALUE_TYPE_STREAM:
+		snprintf(tempStr, sizeof(tempStr) - 1, ">%d", (int)(value.int32Value));
+		break;
+	case VALUE_TYPE_JSON:
+		snprintf(tempStr, sizeof(tempStr) - 1, "#%d", (int)(value.int32Value));
+		break;
+	case VALUE_TYPE_DATE:
         tempStr[0] = '!';
-        writeHex(tempStr + 1, (uint8_t *)&value.doubleValue, sizeof(double));
-        break;
+		writeHex(tempStr + 1, (uint8_t *)&value.doubleValue, sizeof(double));
+		break;
     case VALUE_TYPE_POINTER:
         snprintf(tempStr, sizeof(tempStr) - 1, "%p", value.getVoidPointer());
-        break;
-    case VALUE_TYPE_WIDGET:
-        snprintf(tempStr, sizeof(tempStr) - 1, "*p%p", value.getVoidPointer());
-        break;
-    case VALUE_TYPE_EVENT:
-        snprintf(tempStr, sizeof(tempStr) - 1, "!!%p", value.getVoidPointer());
-        break;
-    default:
-        tempStr[0] = 0;
-        break;
-    }
+		break;
+	case VALUE_TYPE_WIDGET:
+		snprintf(tempStr, sizeof(tempStr) - 1, "*p%p", value.getVoidPointer());
+		break;
+	case VALUE_TYPE_EVENT:
+		snprintf(tempStr, sizeof(tempStr) - 1, "!!%p", value.getVoidPointer());
+		break;
+	default:
+		tempStr[0] = 0;
+		break;
+	}
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-    stringAppendString(tempStr, sizeof(tempStr), "\n");
-    writeDebuggerBufferHook(tempStr, strlen(tempStr));
+	stringAppendString(tempStr, sizeof(tempStr), "\n");
+	writeDebuggerBufferHook(tempStr, strlen(tempStr));
 }
 void onStarted(Assets *assets) {
     if (isSubscribedTo(MESSAGE_TO_DEBUGGER_GLOBAL_VARIABLE_INIT)) {
-        auto flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
+		auto flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
         if (g_globalVariables) {
             for (uint32_t i = 0; i < g_globalVariables->count; i++) {
                 auto pValue = g_globalVariables->values + i;
                 char buffer[256];
                 snprintf(buffer, sizeof(buffer), "%d\t%d\t%p\t",
-                         MESSAGE_TO_DEBUGGER_GLOBAL_VARIABLE_INIT,
-                         (int)i,
-                         (const void *)pValue);
+                    MESSAGE_TO_DEBUGGER_GLOBAL_VARIABLE_INIT,
+                    (int)i,
+                    (const void *)pValue
+                );
                 writeDebuggerBufferHook(buffer, strlen(buffer));
                 writeValue(*pValue);
             }
@@ -6409,9 +6397,10 @@ void onStarted(Assets *assets) {
                 auto pValue = flowDefinition->globalVariables[i];
                 char buffer[256];
                 snprintf(buffer, sizeof(buffer), "%d\t%d\t%p\t",
-                         MESSAGE_TO_DEBUGGER_GLOBAL_VARIABLE_INIT,
-                         (int)i,
-                         (const void *)pValue);
+                    MESSAGE_TO_DEBUGGER_GLOBAL_VARIABLE_INIT,
+                    (int)i,
+                    (const void *)pValue
+                );
                 writeDebuggerBufferHook(buffer, strlen(buffer));
                 writeValue(*pValue);
             }
@@ -6427,212 +6416,225 @@ void onAddToQueue(FlowState *flowState, int sourceComponentIndex, int sourceOutp
         uint32_t alloc;
         getAllocInfo(free, alloc);
         char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\t%d\t%d\t%u\t%u\n",
-                 MESSAGE_TO_DEBUGGER_ADD_TO_QUEUE,
-                 (int)flowState->flowStateIndex,
-                 sourceComponentIndex,
-                 sourceOutputIndex,
-                 targetComponentIndex,
-                 targetInputIndex,
-                 (unsigned int)free,
-                 (unsigned int)ALLOC_BUFFER_SIZE);
+		snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\t%d\t%d\t%u\t%u\n",
+			MESSAGE_TO_DEBUGGER_ADD_TO_QUEUE,
+			(int)flowState->flowStateIndex,
+			sourceComponentIndex,
+			sourceOutputIndex,
+			targetComponentIndex,
+			targetInputIndex,
+            (unsigned int)free,
+            (unsigned int)ALLOC_BUFFER_SIZE
+		);
         writeDebuggerBufferHook(buffer, strlen(buffer));
     }
 }
 void onRemoveFromQueue() {
     if (isSubscribedTo(MESSAGE_TO_DEBUGGER_REMOVE_FROM_QUEUE)) {
         char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\n",
-                 MESSAGE_TO_DEBUGGER_REMOVE_FROM_QUEUE);
+		snprintf(buffer, sizeof(buffer), "%d\n",
+			MESSAGE_TO_DEBUGGER_REMOVE_FROM_QUEUE
+		);
         writeDebuggerBufferHook(buffer, strlen(buffer));
     }
 }
 void onValueChanged(const Value *pValue) {
     if (isSubscribedTo(MESSAGE_TO_DEBUGGER_VALUE_CHANGED)) {
         char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%p\t",
-                 MESSAGE_TO_DEBUGGER_VALUE_CHANGED,
-                 (const void *)pValue);
+		snprintf(buffer, sizeof(buffer), "%d\t%p\t",
+			MESSAGE_TO_DEBUGGER_VALUE_CHANGED,
+            (const void *)pValue
+		);
         writeDebuggerBufferHook(buffer, strlen(buffer));
-        writeValue(pValue->getValue());
+		writeValue(pValue->getValue());
     }
 }
 void onFlowStateCreated(FlowState *flowState) {
     if (isSubscribedTo(MESSAGE_TO_DEBUGGER_FLOW_STATE_CREATED)) {
         char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\t%d\n",
-                 MESSAGE_TO_DEBUGGER_FLOW_STATE_CREATED,
-                 (int)flowState->flowStateIndex,
-                 (int)flowState->flowIndex,
-                 (int)(flowState->parentFlowState ? flowState->parentFlowState->flowStateIndex : -1),
-                 (int)flowState->parentComponentIndex);
+		snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\t%d\n",
+			MESSAGE_TO_DEBUGGER_FLOW_STATE_CREATED,
+			(int)flowState->flowStateIndex,
+			(int)flowState->flowIndex,
+			(int)(flowState->parentFlowState ? flowState->parentFlowState->flowStateIndex : -1),
+			(int)flowState->parentComponentIndex
+		);
         writeDebuggerBufferHook(buffer, strlen(buffer));
     }
     if (isSubscribedTo(MESSAGE_TO_DEBUGGER_LOCAL_VARIABLE_INIT)) {
-        auto flow = flowState->flow;
-        for (uint32_t i = 0; i < flow->localVariables.count; i++) {
-            auto pValue = &flowState->values[flow->componentInputs.count + i];
+		auto flow = flowState->flow;
+		for (uint32_t i = 0; i < flow->localVariables.count; i++) {
+			auto pValue = &flowState->values[flow->componentInputs.count + i];
             char buffer[256];
             snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%p\t",
-                     MESSAGE_TO_DEBUGGER_LOCAL_VARIABLE_INIT,
-                     (int)flowState->flowStateIndex,
-                     (int)i,
-                     (const void *)pValue);
+                MESSAGE_TO_DEBUGGER_LOCAL_VARIABLE_INIT,
+				(int)flowState->flowStateIndex,
+				(int)i,
+                (const void *)pValue
+            );
             writeDebuggerBufferHook(buffer, strlen(buffer));
-            writeValue(*pValue);
+			writeValue(*pValue);
         }
     }
     if (isSubscribedTo(MESSAGE_TO_DEBUGGER_COMPONENT_INPUT_INIT)) {
-        auto flow = flowState->flow;
-        for (uint32_t i = 0; i < flow->componentInputs.count; i++) {
-            auto pValue = &flowState->values[i];
-            char buffer[256];
-            snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%p\t",
-                     MESSAGE_TO_DEBUGGER_COMPONENT_INPUT_INIT,
-                     (int)flowState->flowStateIndex,
-                     (int)i,
-                     (const void *)pValue);
-            writeDebuggerBufferHook(buffer, strlen(buffer));
-            writeValue(*pValue);
+		auto flow = flowState->flow;
+		for (uint32_t i = 0; i < flow->componentInputs.count; i++) {
+				auto pValue = &flowState->values[i];
+				char buffer[256];
+				snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%p\t",
+					MESSAGE_TO_DEBUGGER_COMPONENT_INPUT_INIT,
+					(int)flowState->flowStateIndex,
+					(int)i,
+					(const void *)pValue
+				);
+				writeDebuggerBufferHook(buffer, strlen(buffer));
+				writeValue(*pValue);
         }
-    }
+	}
 }
 void onFlowStateDestroyed(FlowState *flowState) {
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_FLOW_STATE_DESTROYED)) {
-        char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%d\n",
-                 MESSAGE_TO_DEBUGGER_FLOW_STATE_DESTROYED,
-                 (int)flowState->flowStateIndex);
-        writeDebuggerBufferHook(buffer, strlen(buffer));
-    }
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_FLOW_STATE_DESTROYED)) {
+		char buffer[256];
+		snprintf(buffer, sizeof(buffer), "%d\t%d\n",
+			MESSAGE_TO_DEBUGGER_FLOW_STATE_DESTROYED,
+			(int)flowState->flowStateIndex
+		);
+		writeDebuggerBufferHook(buffer, strlen(buffer));
+	}
 }
 void onFlowStateTimelineChanged(FlowState *flowState) {
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_FLOW_STATE_TIMELINE_CHANGED)) {
-        char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%d\t%g\n",
-                 MESSAGE_TO_DEBUGGER_FLOW_STATE_TIMELINE_CHANGED,
-                 (int)flowState->flowStateIndex,
-                 flowState->timelinePosition);
-        writeDebuggerBufferHook(buffer, strlen(buffer));
-    }
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_FLOW_STATE_TIMELINE_CHANGED)) {
+		char buffer[256];
+		snprintf(buffer, sizeof(buffer), "%d\t%d\t%g\n",
+			MESSAGE_TO_DEBUGGER_FLOW_STATE_TIMELINE_CHANGED,
+			(int)flowState->flowStateIndex,
+            flowState->timelinePosition
+		);
+		writeDebuggerBufferHook(buffer, strlen(buffer));
+	}
 }
 void onFlowError(FlowState *flowState, int componentIndex, const char *errorMessage) {
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_FLOW_STATE_ERROR)) {
-        char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t",
-                 MESSAGE_TO_DEBUGGER_FLOW_STATE_ERROR,
-                 (int)flowState->flowStateIndex,
-                 componentIndex);
-        writeDebuggerBufferHook(buffer, strlen(buffer));
-        writeString(errorMessage);
-    }
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_FLOW_STATE_ERROR)) {
+		char buffer[256];
+		snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t",
+			MESSAGE_TO_DEBUGGER_FLOW_STATE_ERROR,
+			(int)flowState->flowStateIndex,
+			componentIndex
+		);
+		writeDebuggerBufferHook(buffer, strlen(buffer));
+		writeString(errorMessage);
+	}
     if (onFlowErrorHook) {
         onFlowErrorHook(flowState, componentIndex, errorMessage);
     }
 }
 void onComponentExecutionStateChanged(FlowState *flowState, int componentIndex) {
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_COMPONENT_EXECUTION_STATE_CHANGED)) {
-        char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%p\n",
-                 MESSAGE_TO_DEBUGGER_COMPONENT_EXECUTION_STATE_CHANGED,
-                 (int)flowState->flowStateIndex,
-                 componentIndex,
-                 (void *)flowState->componenentExecutionStates[componentIndex]);
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_COMPONENT_EXECUTION_STATE_CHANGED)) {
+		char buffer[256];
+		snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%p\n",
+			MESSAGE_TO_DEBUGGER_COMPONENT_EXECUTION_STATE_CHANGED,
+			(int)flowState->flowStateIndex,
+			componentIndex,
+            (void *)flowState->componenentExecutionStates[componentIndex]
+		);
         writeDebuggerBufferHook(buffer, strlen(buffer));
-    }
+	}
 }
 void onComponentAsyncStateChanged(FlowState *flowState, int componentIndex) {
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_COMPONENT_ASYNC_STATE_CHANGED)) {
-        char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\n",
-                 MESSAGE_TO_DEBUGGER_COMPONENT_ASYNC_STATE_CHANGED,
-                 (int)flowState->flowStateIndex,
-                 componentIndex,
-                 flowState->componenentAsyncStates[componentIndex] ? 1 : 0);
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_COMPONENT_ASYNC_STATE_CHANGED)) {
+		char buffer[256];
+		snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\n",
+			MESSAGE_TO_DEBUGGER_COMPONENT_ASYNC_STATE_CHANGED,
+			(int)flowState->flowStateIndex,
+			componentIndex,
+            flowState->componenentAsyncStates[componentIndex] ? 1 : 0
+		);
         writeDebuggerBufferHook(buffer, strlen(buffer));
-    }
+	}
 }
 static void writeLogMessage(const char *str) {
-    for (const char *p = str; *p; p++) {
-        if (*p == '\t') {
-            WRITE_TO_OUTPUT_BUFFER('\\');
-            WRITE_TO_OUTPUT_BUFFER('t');
-        }
-        if (*p == '\n') {
-            WRITE_TO_OUTPUT_BUFFER('\\');
-            WRITE_TO_OUTPUT_BUFFER('n');
-        } else {
-            WRITE_TO_OUTPUT_BUFFER(*p);
-        }
-    }
-    WRITE_TO_OUTPUT_BUFFER('\n');
-    FLUSH_OUTPUT_BUFFER();
+	for (const char *p = str; *p; p++) {
+		if (*p == '\t') {
+			WRITE_TO_OUTPUT_BUFFER('\\');
+			WRITE_TO_OUTPUT_BUFFER('t');
+		} if (*p == '\n') {
+			WRITE_TO_OUTPUT_BUFFER('\\');
+			WRITE_TO_OUTPUT_BUFFER('n');
+		} else {
+			WRITE_TO_OUTPUT_BUFFER(*p);
+		}
+	}
+	WRITE_TO_OUTPUT_BUFFER('\n');
+	FLUSH_OUTPUT_BUFFER();
 }
 static void writeLogMessage(const char *str, size_t len) {
-    for (size_t i = 0; i < len; i++) {
-        if (str[i] == '\t') {
-            WRITE_TO_OUTPUT_BUFFER('\\');
-            WRITE_TO_OUTPUT_BUFFER('t');
-        }
-        if (str[i] == '\n') {
-            WRITE_TO_OUTPUT_BUFFER('\\');
-            WRITE_TO_OUTPUT_BUFFER('n');
-        } else {
-            WRITE_TO_OUTPUT_BUFFER(str[i]);
-        }
-    }
-    WRITE_TO_OUTPUT_BUFFER('\n');
-    FLUSH_OUTPUT_BUFFER();
+	for (size_t i = 0; i < len; i++) {
+		if (str[i] == '\t') {
+			WRITE_TO_OUTPUT_BUFFER('\\');
+			WRITE_TO_OUTPUT_BUFFER('t');
+		} if (str[i] == '\n') {
+			WRITE_TO_OUTPUT_BUFFER('\\');
+			WRITE_TO_OUTPUT_BUFFER('n');
+		} else {
+			WRITE_TO_OUTPUT_BUFFER(str[i]);
+		}
+	}
+	WRITE_TO_OUTPUT_BUFFER('\n');
+	FLUSH_OUTPUT_BUFFER();
 }
 void logInfo(FlowState *flowState, unsigned componentIndex, const char *message) {
 #if defined(EEZ_FOR_LVGL)
     LV_LOG_USER("EEZ-FLOW: %s", message);
 #endif
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_LOG)) {
-        char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\t",
-                 MESSAGE_TO_DEBUGGER_LOG,
-                 LOG_ITEM_TYPE_INFO,
-                 (int)flowState->flowStateIndex,
-                 componentIndex);
-        writeDebuggerBufferHook(buffer, strlen(buffer));
-        writeLogMessage(message);
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_LOG)) {
+		char buffer[256];
+		snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\t",
+			MESSAGE_TO_DEBUGGER_LOG,
+            LOG_ITEM_TYPE_INFO,
+            (int)flowState->flowStateIndex,
+			componentIndex
+		);
+		writeDebuggerBufferHook(buffer, strlen(buffer));
+		writeLogMessage(message);
     }
 }
 void logScpiCommand(FlowState *flowState, unsigned componentIndex, const char *cmd) {
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_LOG)) {
-        char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\tSCPI COMMAND: ",
-                 MESSAGE_TO_DEBUGGER_LOG,
-                 LOG_ITEM_TYPE_SCPI,
-                 (int)flowState->flowStateIndex,
-                 componentIndex);
-        writeDebuggerBufferHook(buffer, strlen(buffer));
-        writeLogMessage(cmd);
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_LOG)) {
+		char buffer[256];
+		snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\tSCPI COMMAND: ",
+			MESSAGE_TO_DEBUGGER_LOG,
+            LOG_ITEM_TYPE_SCPI,
+            (int)flowState->flowStateIndex,
+			componentIndex
+		);
+		writeDebuggerBufferHook(buffer, strlen(buffer));
+		writeLogMessage(cmd);
     }
 }
 void logScpiQuery(FlowState *flowState, unsigned componentIndex, const char *query) {
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_LOG)) {
-        char buffer[256];
-        snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\tSCPI QUERY: ",
-                 MESSAGE_TO_DEBUGGER_LOG,
-                 LOG_ITEM_TYPE_SCPI,
-                 (int)flowState->flowStateIndex,
-                 componentIndex);
-        writeDebuggerBufferHook(buffer, strlen(buffer));
-        writeLogMessage(query);
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_LOG)) {
+		char buffer[256];
+		snprintf(buffer, sizeof(buffer), "%d\t%d\t%d\t%d\tSCPI QUERY: ",
+			MESSAGE_TO_DEBUGGER_LOG,
+            LOG_ITEM_TYPE_SCPI,
+            (int)flowState->flowStateIndex,
+			componentIndex
+		);
+		writeDebuggerBufferHook(buffer, strlen(buffer));
+		writeLogMessage(query);
     }
 }
 void logScpiQueryResult(FlowState *flowState, unsigned componentIndex, const char *resultText, size_t resultTextLen) {
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_LOG)) {
-        char buffer[256];
-        snprintf(buffer, sizeof(buffer) - 1, "%d\t%d\t%d\t%d\tSCPI QUERY RESULT: ",
-                 MESSAGE_TO_DEBUGGER_LOG,
-                 LOG_ITEM_TYPE_SCPI,
-                 (int)flowState->flowStateIndex,
-                 componentIndex);
-        writeDebuggerBufferHook(buffer, strlen(buffer));
-        writeLogMessage(resultText, resultTextLen);
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_LOG)) {
+		char buffer[256];
+		snprintf(buffer, sizeof(buffer) - 1, "%d\t%d\t%d\t%d\tSCPI QUERY RESULT: ",
+			MESSAGE_TO_DEBUGGER_LOG,
+            LOG_ITEM_TYPE_SCPI,
+            (int)flowState->flowStateIndex,
+			componentIndex
+		);
+		writeDebuggerBufferHook(buffer, strlen(buffer));
+		writeLogMessage(resultText, resultTextLen);
     }
 }
 #if EEZ_OPTION_GUI
@@ -6669,11 +6671,12 @@ void onPageChanged(int previousPageId, int activePageId, bool activePageIsFromSt
             }
         }
     }
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_PAGE_CHANGED)) {
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_PAGE_CHANGED)) {
         char buffer[256];
         snprintf(buffer, sizeof(buffer), "%d\t%d\n",
-                 MESSAGE_TO_DEBUGGER_PAGE_CHANGED,
-                 activePageId);
+            MESSAGE_TO_DEBUGGER_PAGE_CHANGED,
+            activePageId
+        );
         writeDebuggerBufferHook(buffer, strlen(buffer));
     }
 }
@@ -6701,17 +6704,18 @@ void onPageChanged(int previousPageId, int activePageId, bool activePageIsFromSt
             }
         }
     }
-    if (isSubscribedTo(MESSAGE_TO_DEBUGGER_PAGE_CHANGED)) {
+	if (isSubscribedTo(MESSAGE_TO_DEBUGGER_PAGE_CHANGED)) {
         char buffer[256];
         snprintf(buffer, sizeof(buffer), "%d\t%d\n",
-                 MESSAGE_TO_DEBUGGER_PAGE_CHANGED,
-                 activePageId);
+            MESSAGE_TO_DEBUGGER_PAGE_CHANGED,
+            activePageId
+        );
         writeDebuggerBufferHook(buffer, strlen(buffer));
     }
 }
-#endif
-} // namespace flow
-} // namespace eez
+#endif 
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/expression.cpp
 // -----------------------------------------------------------------------------
@@ -6723,34 +6727,34 @@ namespace eez {
 namespace flow {
 EvalStack g_stack;
 static void evalExpression(FlowState *flowState, const uint8_t *instructions, int *numInstructionBytes) {
-    auto flowDefinition = flowState->flowDefinition;
-    auto flow = flowState->flow;
-    int i = 0;
-    while (true) {
-        uint16_t instruction = instructions[i] + (instructions[i + 1] << 8);
-        auto instructionType = instruction & EXPR_EVAL_INSTRUCTION_TYPE_MASK;
-        auto instructionArg = instruction & EXPR_EVAL_INSTRUCTION_PARAM_MASK;
-        if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_PUSH_CONSTANT) {
-            g_stack.push(*flowDefinition->constants[instructionArg]);
-        } else if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_PUSH_INPUT) {
-            g_stack.push(flowState->values[instructionArg]);
-        } else if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_PUSH_LOCAL_VAR) {
-            g_stack.push(&flowState->values[flow->componentInputs.count + instructionArg]);
-        } else if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_PUSH_GLOBAL_VAR) {
-            if ((uint32_t)instructionArg < flowDefinition->globalVariables.count) {
+	auto flowDefinition = flowState->flowDefinition;
+	auto flow = flowState->flow;
+	int i = 0;
+	while (true) {
+		uint16_t instruction = instructions[i] + (instructions[i + 1] << 8);
+		auto instructionType = instruction & EXPR_EVAL_INSTRUCTION_TYPE_MASK;
+		auto instructionArg = instruction & EXPR_EVAL_INSTRUCTION_PARAM_MASK;
+		if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_PUSH_CONSTANT) {
+			g_stack.push(*flowDefinition->constants[instructionArg]);
+		} else if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_PUSH_INPUT) {
+			g_stack.push(flowState->values[instructionArg]);
+		} else if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_PUSH_LOCAL_VAR) {
+			g_stack.push(&flowState->values[flow->componentInputs.count + instructionArg]);
+		} else if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_PUSH_GLOBAL_VAR) {
+			if ((uint32_t)instructionArg < flowDefinition->globalVariables.count) {
                 if (g_globalVariables) {
-                    g_stack.push(g_globalVariables->values + instructionArg);
+				    g_stack.push(g_globalVariables->values + instructionArg);
                 } else {
                     g_stack.push(flowDefinition->globalVariables[instructionArg]);
                 }
-            } else {
-                g_stack.push(Value((int)(instructionArg - flowDefinition->globalVariables.count + 1), VALUE_TYPE_NATIVE_VARIABLE));
-            }
-        } else if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_PUSH_OUTPUT) {
-            g_stack.push(Value((uint16_t)instructionArg, VALUE_TYPE_FLOW_OUTPUT));
-        } else if (instructionType == EXPR_EVAL_INSTRUCTION_ARRAY_ELEMENT) {
-            auto elementIndexValue = g_stack.pop().getValue();
-            auto arrayValue = g_stack.pop().getValue();
+			} else {
+				g_stack.push(Value((int)(instructionArg - flowDefinition->globalVariables.count + 1), VALUE_TYPE_NATIVE_VARIABLE));
+			}
+		} else if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_PUSH_OUTPUT) {
+			g_stack.push(Value((uint16_t)instructionArg, VALUE_TYPE_FLOW_OUTPUT));
+		} else if (instructionType == EXPR_EVAL_INSTRUCTION_ARRAY_ELEMENT) {
+			auto elementIndexValue = g_stack.pop().getValue();
+			auto arrayValue = g_stack.pop().getValue();
             if (arrayValue.getType() == VALUE_TYPE_UNDEFINED || arrayValue.getType() == VALUE_TYPE_NULL) {
                 g_stack.push(Value(0, VALUE_TYPE_UNDEFINED));
             } else {
@@ -6789,14 +6793,14 @@ static void evalExpression(FlowState *flowState, const uint8_t *instructions, in
                     g_stack.setErrorMessage("Array value expected\n");
                 }
             }
-        } else if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_OPERATION) {
-            g_evalOperations[instructionArg](g_stack);
-        } else {
+		} else if (instructionType == EXPR_EVAL_INSTRUCTION_TYPE_OPERATION) {
+			g_evalOperations[instructionArg](g_stack);
+		} else {
             if (instruction == EXPR_EVAL_INSTRUCTION_TYPE_END_WITH_DST_VALUE_TYPE) {
-                i += 2;
+    			i += 2;
                 if (g_stack.sp == 1) {
                     auto finalResult = g_stack.pop();
-#define VALUE_TYPE (instructions[i] + (instructions[i + 1] << 8) + (instructions[i + 2] << 16) + (instructions[i + 3] << 24))
+                    #define VALUE_TYPE (instructions[i] + (instructions[i + 1] << 8) + (instructions[i + 2] << 16) + (instructions[i + 3] << 24))
                     if (finalResult.getType() == VALUE_TYPE_VALUE_PTR) {
                         finalResult.dstValueType = VALUE_TYPE;
                     } else if (finalResult.getType() == VALUE_TYPE_ARRAY_ELEMENT_VALUE) {
@@ -6808,15 +6812,15 @@ static void evalExpression(FlowState *flowState, const uint8_t *instructions, in
                 i += 4;
                 break;
             } else {
-                i += 2;
-                break;
+			    i += 2;
+			    break;
             }
-        }
-        i += 2;
-    }
-    if (numInstructionBytes) {
-        *numInstructionBytes = i;
-    }
+		}
+		i += 2;
+	}
+	if (numInstructionBytes) {
+		*numInstructionBytes = i;
+	}
 }
 #if EEZ_OPTION_GUI
 bool evalExpression(FlowState *flowState, int componentIndex, const uint8_t *instructions, Value &result, const FlowError &errorMessage, int *numInstructionBytes, const int32_t *iterators, DataOperationEnum operation) {
@@ -6825,17 +6829,17 @@ bool evalExpression(FlowState *flowState, int componentIndex, const uint8_t *ins
 #endif
     size_t savedSp = g_stack.sp;
     FlowState *savedFlowState = g_stack.flowState;
-    int savedComponentIndex = g_stack.componentIndex;
-    const int32_t *savedIterators = g_stack.iterators;
+	int savedComponentIndex = g_stack.componentIndex;
+	const int32_t *savedIterators = g_stack.iterators;
     const char *savedErrorMessage = g_stack.errorMessage;
-    g_stack.flowState = flowState;
-    g_stack.componentIndex = componentIndex;
-    g_stack.iterators = iterators;
+	g_stack.flowState = flowState;
+	g_stack.componentIndex = componentIndex;
+	g_stack.iterators = iterators;
     g_stack.errorMessage = nullptr;
-    evalExpression(flowState, instructions, numInstructionBytes);
-    g_stack.flowState = savedFlowState;
-    g_stack.componentIndex = savedComponentIndex;
-    g_stack.iterators = savedIterators;
+	evalExpression(flowState, instructions, numInstructionBytes);
+	g_stack.flowState = savedFlowState;
+	g_stack.componentIndex = savedComponentIndex;
+	g_stack.iterators = savedIterators;
     g_stack.errorMessage = savedErrorMessage;
     if (g_stack.sp == savedSp + 1) {
 #if EEZ_OPTION_GUI
@@ -6861,7 +6865,7 @@ bool evalExpression(FlowState *flowState, int componentIndex, const uint8_t *ins
                 }
                 return true;
             }
-        } else if (operation == DATA_OPERATION_GET_CANVAS_REFRESH_STATE) {
+        }  else if (operation == DATA_OPERATION_GET_CANVAS_REFRESH_STATE) {
             result = g_stack.pop();
             if (!result.isError()) {
                 if (result.getType() == VALUE_TYPE_NATIVE_VARIABLE) {
@@ -6884,21 +6888,21 @@ bool evalExpression(FlowState *flowState, int componentIndex, const uint8_t *ins
     }
     FlowError flowError = errorMessage.setDescription(g_stack.errorMessage);
     throwError(flowState, componentIndex, flowError);
-    return false;
+	return false;
 }
 bool evalAssignableExpression(FlowState *flowState, int componentIndex, const uint8_t *instructions, Value &result, const FlowError &errorMessage, int *numInstructionBytes, const int32_t *iterators) {
     FlowState *savedFlowState = g_stack.flowState;
-    int savedComponentIndex = g_stack.componentIndex;
-    const int32_t *savedIterators = g_stack.iterators;
+	int savedComponentIndex = g_stack.componentIndex;
+	const int32_t *savedIterators = g_stack.iterators;
     const char *savedErrorMessage = g_stack.errorMessage;
-    g_stack.flowState = flowState;
-    g_stack.componentIndex = componentIndex;
-    g_stack.iterators = iterators;
+	g_stack.flowState = flowState;
+	g_stack.componentIndex = componentIndex;
+	g_stack.iterators = iterators;
     g_stack.errorMessage = nullptr;
-    evalExpression(flowState, instructions, numInstructionBytes);
-    g_stack.flowState = savedFlowState;
-    g_stack.componentIndex = savedComponentIndex;
-    g_stack.iterators = savedIterators;
+	evalExpression(flowState, instructions, numInstructionBytes);
+	g_stack.flowState = savedFlowState;
+	g_stack.componentIndex = savedComponentIndex;
+	g_stack.iterators = savedIterators;
     g_stack.errorMessage = savedErrorMessage;
     if (g_stack.sp == 1) {
         auto finalResult = g_stack.pop();
@@ -6907,14 +6911,15 @@ bool evalAssignableExpression(FlowState *flowState, int componentIndex, const ui
             finalResult.getType() == VALUE_TYPE_NATIVE_VARIABLE ||
             finalResult.getType() == VALUE_TYPE_FLOW_OUTPUT ||
             finalResult.getType() == VALUE_TYPE_ARRAY_ELEMENT_VALUE ||
-            finalResult.getType() == VALUE_TYPE_JSON_MEMBER_VALUE) {
+            finalResult.getType() == VALUE_TYPE_JSON_MEMBER_VALUE
+        ) {
             result = finalResult;
             return true;
         }
     }
     errorMessage.setDescription(g_stack.errorMessage);
     throwError(flowState, componentIndex, errorMessage);
-    return false;
+	return false;
 }
 #if EEZ_OPTION_GUI
 bool evalProperty(FlowState *flowState, int componentIndex, int propertyIndex, Value &result, const FlowError &errorMessage, int *numInstructionBytes, const int32_t *iterators, DataOperationEnum operation) {
@@ -6962,22 +6967,22 @@ bool evalAssignableProperty(FlowState *flowState, int componentIndex, int proper
 }
 #if EEZ_OPTION_GUI
 int16_t getNativeVariableId(const WidgetCursor &widgetCursor) {
-    if (widgetCursor.flowState) {
-        FlowState *flowState = widgetCursor.flowState;
-        auto flow = flowState->flow;
-        WidgetDataItem *widgetDataItem = flow->widgetDataItems[-(widgetCursor.widget->data + 1)];
-        if (widgetDataItem && widgetDataItem->componentIndex != -1 && widgetDataItem->propertyValueIndex != -1) {
-            auto component = flow->components[widgetDataItem->componentIndex];
-            auto property = component->properties[widgetDataItem->propertyValueIndex];
+	if (widgetCursor.flowState) {
+		FlowState *flowState = widgetCursor.flowState;
+		auto flow = flowState->flow;
+		WidgetDataItem *widgetDataItem = flow->widgetDataItems[-(widgetCursor.widget->data + 1)];
+		if (widgetDataItem && widgetDataItem->componentIndex != -1 && widgetDataItem->propertyValueIndex != -1) {
+			auto component = flow->components[widgetDataItem->componentIndex];
+			auto property = component->properties[widgetDataItem->propertyValueIndex];
             FlowState *savedFlowState = g_stack.flowState;
             int savedComponentIndex = g_stack.componentIndex;
             const int32_t *savedIterators = g_stack.iterators;
             const char *savedErrorMessage = g_stack.errorMessage;
-            g_stack.flowState = flowState;
-            g_stack.componentIndex = widgetDataItem->componentIndex;
-            g_stack.iterators = widgetCursor.iterators;
+			g_stack.flowState = flowState;
+			g_stack.componentIndex = widgetDataItem->componentIndex;
+			g_stack.iterators = widgetCursor.iterators;
             g_stack.errorMessage = nullptr;
-            evalExpression(flowState, property->evalInstructions, nullptr);
+			evalExpression(flowState, property->evalInstructions, nullptr);
             g_stack.flowState = savedFlowState;
             g_stack.componentIndex = savedComponentIndex;
             g_stack.iterators = savedIterators;
@@ -6988,13 +6993,13 @@ int16_t getNativeVariableId(const WidgetCursor &widgetCursor) {
                     return finalResult.getInt();
                 }
             }
-        }
-    }
-    return DATA_ID_NONE;
+		}
+	}
+	return DATA_ID_NONE;
 }
 #endif
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/flow.cpp
 // -----------------------------------------------------------------------------
@@ -7021,45 +7026,45 @@ static bool g_isStopping = false;
 static bool g_isStopped = true;
 static void doStop();
 unsigned start(Assets *assets) {
-    auto flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
-    if (flowDefinition->flows.count == 0) {
-        return 0;
-    }
+	auto flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
+	if (flowDefinition->flows.count == 0) {
+		return 0;
+	}
     g_isStopped = false;
     g_isStopping = false;
     initGlobalVariables(assets);
-    queueReset();
+	queueReset();
     watchListReset();
-    scpiComponentInitHook();
-    onStarted(assets);
-    return 1;
+	scpiComponentInitHook();
+	onStarted(assets);
+	return 1;
 }
 void tick() {
-    if (isFlowStopped()) {
-        return;
-    }
+	if (isFlowStopped()) {
+		return;
+	}
     if (g_isStopping) {
         doStop();
         return;
     }
-    uint32_t startTickCount = millis();
+	uint32_t startTickCount = millis();
     visitWatchList();
     auto queueSizeAtTickStart = getQueueSize();
     for (size_t i = 0; i < queueSizeAtTickStart || g_numNonContinuousTaskInQueue > 0; i++) {
-        FlowState *flowState;
-        unsigned componentIndex;
+		FlowState *flowState;
+		unsigned componentIndex;
         bool continuousTask;
-        if (!peekNextTaskFromQueue(flowState, componentIndex, continuousTask)) {
-            break;
-        }
+		if (!peekNextTaskFromQueue(flowState, componentIndex, continuousTask)) {
+			break;
+		}
         if (!flowState) {
             removeNextTaskFromQueue();
             continue;
         }
-        if (!continuousTask && !canExecuteStep(flowState, componentIndex)) {
-            break;
-        }
-        removeNextTaskFromQueue();
+		if (!continuousTask && !canExecuteStep(flowState, componentIndex)) {
+			break;
+		}
+		removeNextTaskFromQueue();
         flowState->executingComponentIndex = componentIndex;
         if (flowState->error) {
             deallocateComponentExecutionState(flowState, componentIndex);
@@ -7087,8 +7092,8 @@ void tick() {
                 break;
             }
         }
-    }
-    finishToDebuggerMessageHook();
+	}
+	finishToDebuggerMessageHook();
     for (FlowState *flowState = g_firstFlowState; flowState; flowState = flowState->nextSibling) {
         if (flowState->deleteOnNextTick) {
             freeFlowState(flowState);
@@ -7106,7 +7111,7 @@ void doStop() {
     g_firstFlowState = nullptr;
     g_lastFlowState = nullptr;
     g_isStopped = true;
-    queueReset();
+	queueReset();
     watchListReset();
 }
 bool isFlowStopped() {
@@ -7117,22 +7122,22 @@ unsigned getTickMaxDurationCounter() {
 }
 #if EEZ_OPTION_GUI
 FlowState *getPageFlowState(Assets *assets, int16_t pageIndex, const WidgetCursor &widgetCursor) {
-    if (!assets->flowDefinition) {
-        return nullptr;
-    }
-    if (isFlowStopped()) {
-        return nullptr;
-    }
-    if (widgetCursor.widget && widgetCursor.widget->type == WIDGET_TYPE_USER_WIDGET) {
-        if (widgetCursor.flowState) {
-            auto userWidgetWidget = (UserWidgetWidget *)widgetCursor.widget;
-            auto flowState = widgetCursor.flowState;
-            auto userWidgetWidgetComponentIndex = userWidgetWidget->componentIndex;
-            return getUserWidgetFlowState(flowState, userWidgetWidgetComponentIndex, pageIndex);
-        }
-    } else {
-        auto page = assets->pages[pageIndex];
-        if (!(page->flags & PAGE_IS_USED_AS_USER_WIDGET)) {
+	if (!assets->flowDefinition) {
+		return nullptr;
+	}
+	if (isFlowStopped()) {
+		return nullptr;
+	}
+	if (widgetCursor.widget && widgetCursor.widget->type == WIDGET_TYPE_USER_WIDGET) {
+		if (widgetCursor.flowState) {
+			auto userWidgetWidget = (UserWidgetWidget *)widgetCursor.widget;
+			auto flowState = widgetCursor.flowState;
+			auto userWidgetWidgetComponentIndex = userWidgetWidget->componentIndex;
+			return getUserWidgetFlowState(flowState, userWidgetWidgetComponentIndex, pageIndex);
+		}
+	} else {
+		auto page = assets->pages[pageIndex];
+		if (!(page->flags & PAGE_IS_USED_AS_USER_WIDGET)) {
             FlowState *flowState;
             for (flowState = g_firstFlowState; flowState; flowState = flowState->nextSibling) {
                 if (flowState->flowIndex == pageIndex) {
@@ -7141,22 +7146,22 @@ FlowState *getPageFlowState(Assets *assets, int16_t pageIndex, const WidgetCurso
             }
             if (flowState) {
                 flowState->deleteOnNextTick = false;
-            } else {
-                flowState = initPageFlowState(assets, pageIndex, nullptr, 0);
+			} else {
+				flowState = initPageFlowState(assets, pageIndex, nullptr, 0);
             }
-            return flowState;
-        }
-    }
-    return nullptr;
+			return flowState;
+		}
+	}
+	return nullptr;
 }
 #else
 FlowState *getPageFlowState(Assets *assets, int16_t pageIndex) {
-    if (!assets->flowDefinition) {
-        return nullptr;
-    }
-    if (isFlowStopped()) {
-        return nullptr;
-    }
+	if (!assets->flowDefinition) {
+		return nullptr;
+	}
+	if (isFlowStopped()) {
+		return nullptr;
+	}
     FlowState *flowState;
     for (flowState = g_firstFlowState; flowState; flowState = flowState->nextSibling) {
         if (flowState->flowIndex == pageIndex) {
@@ -7170,9 +7175,9 @@ FlowState *getPageFlowState(Assets *assets, int16_t pageIndex) {
     }
     return flowState;
 }
-#endif
+#endif 
 int getPageIndex(FlowState *flowState) {
-    return flowState->flowIndex;
+	return flowState->flowIndex;
 }
 void deletePageFlowState(Assets *assets, int16_t pageIndex) {
     EEZ_UNUSED(assets);
@@ -7218,7 +7223,7 @@ void setUserProperty(unsigned propertyIndex, const Value &value) {
 }
 AsyncAction *beginAsyncExecution() {
     startAsyncExecution(g_executeActionFlowState, g_executeActionComponentIndex);
-    AsyncAction *asyncAction = (AsyncAction *)alloc(sizeof(AsyncAction), 0xcb44f51e);
+    AsyncAction *asyncAction = (AsyncAction *) alloc(sizeof(AsyncAction), 0xcb44f51e);
     asyncAction->flowState = g_executeActionFlowState;
     asyncAction->componentIndex = g_executeActionComponentIndex;
     return asyncAction;
@@ -7242,15 +7247,15 @@ void setUserPropertyAsync(AsyncAction *asyncAction, unsigned propertyIndex, cons
 }
 #if EEZ_OPTION_GUI
 void executeFlowAction(const WidgetCursor &widgetCursor, int16_t actionId, void *param) {
-    if (isFlowStopped()) {
-        return;
-    }
-    auto flowState = widgetCursor.flowState;
-    actionId = -actionId - 1;
-    auto flow = flowState->flow;
-    if (actionId >= 0 && actionId < (int16_t)flow->widgetActions.count) {
-        auto componentOutput = flow->widgetActions[actionId];
-        if (componentOutput->componentIndex != -1 && componentOutput->componentOutputIndex != -1) {
+	if (isFlowStopped()) {
+		return;
+	}
+	auto flowState = widgetCursor.flowState;
+	actionId = -actionId - 1;
+	auto flow = flowState->flow;
+	if (actionId >= 0 && actionId < (int16_t)flow->widgetActions.count) {
+		auto componentOutput = flow->widgetActions[actionId];
+		if (componentOutput->componentIndex != -1 && componentOutput->componentOutputIndex != -1) {
             if (widgetCursor.widget->type == WIDGET_TYPE_DROP_DOWN_LIST) {
                 auto params = Value::makeArrayRef(defs_v3::SYSTEM_STRUCTURE_DROP_DOWN_LIST_CHANGE_EVENT_NUM_FIELDS, defs_v3::SYSTEM_STRUCTURE_DROP_DOWN_LIST_CHANGE_EVENT, 0x53e3b30b);
                 ((ArrayValueRef *)params.refValue)->arrayValue.values[defs_v3::SYSTEM_STRUCTURE_DROP_DOWN_LIST_CHANGE_EVENT_FIELD_INDEX] = widgetCursor.iterators[0];
@@ -7271,79 +7276,80 @@ void executeFlowAction(const WidgetCursor &widgetCursor, int16_t actionId, void 
                 ((ArrayValueRef *)params.refValue)->arrayValue.values[defs_v3::SYSTEM_STRUCTURE_CLICK_EVENT_FIELD_INDEXES] = indexes;
                 propagateValue(flowState, componentOutput->componentIndex, componentOutput->componentOutputIndex, params);
             }
-        } else if (componentOutput->componentOutputIndex != -1) {
+		} else if (componentOutput->componentOutputIndex != -1) {
             propagateValue(flowState, componentOutput->componentIndex, componentOutput->componentOutputIndex);
         }
-    }
-    for (int i = 0; i < 3; i++) {
-        tick();
-    }
+	}
+	for (int i = 0; i < 3; i++) {
+		tick();
+	}
 }
 void dataOperation(int16_t dataId, DataOperationEnum operation, const WidgetCursor &widgetCursor, Value &value) {
-    if (isFlowStopped()) {
-        return;
-    }
-    auto flowState = widgetCursor.flowState;
-    auto flowDataId = -dataId - 1;
-    auto flow = flowState->flow;
-    if (flowDataId >= 0 && flowDataId < (int16_t)flow->widgetDataItems.count) {
-        WidgetDataItem *widgetDataItem = flow->widgetDataItems[flowDataId];
-        auto component = flow->components[widgetDataItem->componentIndex];
-        if (operation == DATA_OPERATION_GET) {
-            getValue(flowDataId, operation, widgetCursor, value);
-            if (component->type == WIDGET_TYPE_INPUT && dataId == widgetCursor.widget->data) {
-                value = getInputWidgetData(widgetCursor, value);
-            }
-        } else if (operation == DATA_OPERATION_COUNT) {
-            Value arrayValue;
-            getValue(flowDataId, operation, widgetCursor, arrayValue);
-            if (arrayValue.isArray()) {
+	if (isFlowStopped()) {
+		return;
+	}
+	auto flowState = widgetCursor.flowState;
+	auto flowDataId = -dataId - 1;
+	auto flow = flowState->flow;
+	if (flowDataId >= 0 && flowDataId < (int16_t)flow->widgetDataItems.count) {
+		WidgetDataItem *widgetDataItem = flow->widgetDataItems[flowDataId];
+		auto component = flow->components[widgetDataItem->componentIndex];
+		if (operation == DATA_OPERATION_GET) {
+			getValue(flowDataId, operation, widgetCursor, value);
+			if (component->type == WIDGET_TYPE_INPUT && dataId == widgetCursor.widget->data) {
+				value = getInputWidgetData(widgetCursor, value);
+			}
+		} else if (operation == DATA_OPERATION_COUNT) {
+			Value arrayValue;
+			getValue(flowDataId, operation, widgetCursor, arrayValue);
+			if (arrayValue.isArray()) {
                 auto array = arrayValue.getArray();
                 if (array->arrayType == defs_v3::SYSTEM_STRUCTURE_SCROLLBAR_STATE) {
                     value = array->values[defs_v3::SYSTEM_STRUCTURE_SCROLLBAR_STATE_FIELD_NUM_ITEMS];
                 } else {
-                    value = array->arraySize;
+				    value = array->arraySize;
                 }
-            } else {
+			} else {
                 value = arrayValue;
             }
-        } else if (operation == DATA_OPERATION_GET_MIN) {
-            if (component->type == WIDGET_TYPE_INPUT) {
-                value = getInputWidgetMin(widgetCursor);
-            }
-        } else if (operation == DATA_OPERATION_GET_MAX) {
-            if (component->type == WIDGET_TYPE_INPUT) {
-                value = getInputWidgetMax(widgetCursor);
-            }
-        } else if (operation == DATA_OPERATION_GET_PRECISION) {
-            if (component->type == WIDGET_TYPE_INPUT) {
-                value = getInputWidgetPrecision(widgetCursor);
-            }
-        } else if (operation == DATA_OPERATION_GET_UNIT) {
-            if (component->type == WIDGET_TYPE_INPUT) {
-                value = getBaseUnit(getInputWidgetUnit(widgetCursor));
-            }
-        } else if (operation == DATA_OPERATION_SET) {
-            if (component->type == WIDGET_TYPE_INPUT) {
-                auto inputWidget = (InputWidget *)widgetCursor.widget;
-                if (inputWidget->flags & INPUT_WIDGET_TYPE_NUMBER) {
-                    if (value.isInt32()) {
-                        setValue(flowDataId, widgetCursor, value);
-                    } else {
-                        Value precisionValue = getInputWidgetPrecision(widgetCursor);
-                        float precision = precisionValue.toFloat();
-                        float valueFloat = value.toFloat();
-                        Unit unit = getInputWidgetUnit(widgetCursor);
-                        setValue(flowDataId, widgetCursor, Value(roundPrec(valueFloat, precision) / getUnitFactor(unit), VALUE_TYPE_FLOAT));
-                    }
-                } else {
-                    setValue(flowDataId, widgetCursor, value);
-                }
-                executeFlowAction(widgetCursor, inputWidget->action, nullptr);
-            } else {
-                setValue(flowDataId, widgetCursor, value);
-            }
-        } else if (operation == DATA_OPERATION_YT_DATA_GET_SIZE) {
+		}
+		else if (operation == DATA_OPERATION_GET_MIN) {
+			if (component->type == WIDGET_TYPE_INPUT) {
+				value = getInputWidgetMin(widgetCursor);
+			}
+		} else if (operation == DATA_OPERATION_GET_MAX) {
+			if (component->type == WIDGET_TYPE_INPUT) {
+				value = getInputWidgetMax(widgetCursor);
+			}
+		} else if (operation == DATA_OPERATION_GET_PRECISION) {
+			if (component->type == WIDGET_TYPE_INPUT) {
+				value = getInputWidgetPrecision(widgetCursor);
+			}
+		} else if (operation == DATA_OPERATION_GET_UNIT) {
+			if (component->type == WIDGET_TYPE_INPUT) {
+				value = getBaseUnit(getInputWidgetUnit(widgetCursor));
+			}
+		} else if (operation == DATA_OPERATION_SET) {
+			if (component->type == WIDGET_TYPE_INPUT) {
+				auto inputWidget = (InputWidget *)widgetCursor.widget;
+				if (inputWidget->flags & INPUT_WIDGET_TYPE_NUMBER) {
+					if (value.isInt32()) {
+						setValue(flowDataId, widgetCursor, value);
+					} else {
+						Value precisionValue = getInputWidgetPrecision(widgetCursor);
+						float precision = precisionValue.toFloat();
+						float valueFloat = value.toFloat();
+						Unit unit = getInputWidgetUnit(widgetCursor);
+						setValue(flowDataId, widgetCursor, Value(roundPrec(valueFloat, precision) / getUnitFactor(unit), VALUE_TYPE_FLOAT));
+					}
+				} else {
+					setValue(flowDataId, widgetCursor, value);
+				}
+				executeFlowAction(widgetCursor, inputWidget->action, nullptr);
+			} else {
+				setValue(flowDataId, widgetCursor, value);
+			}
+		} else if (operation == DATA_OPERATION_YT_DATA_GET_SIZE) {
             Value arrayValue;
             getValue(flowDataId, operation, widgetCursor, arrayValue);
             if (arrayValue.isArray()) {
@@ -7423,20 +7429,20 @@ void dataOperation(int16_t dataId, DataOperationEnum operation, const WidgetCurs
             getValue(flowDataId, operation, widgetCursor, value);
         }
 #if OPTION_KEYPAD
-        else if (operation == DATA_OPERATION_GET_TEXT_CURSOR_POSITION) {
+		else if (operation == DATA_OPERATION_GET_TEXT_CURSOR_POSITION) {
             getValue(flowDataId, operation, widgetCursor, value);
-        }
+		}
 #endif
 #if EEZ_OPTION_GUI
-        else if (operation == DATA_OPERATION_GET_CANVAS_REFRESH_STATE) {
+		else if (operation == DATA_OPERATION_GET_CANVAS_REFRESH_STATE) {
             getValue(flowDataId, operation, widgetCursor, value);
-        }
+		}
 #endif
-    } else {
-        value = Value();
-    }
+	} else {
+		value = Value();
+	}
 }
-#endif
+#endif 
 void onArrayValueFree(ArrayValue *arrayValue) {
 #if defined(EEZ_DASHBOARD_API)
     if (g_dashboardValueFree) {
@@ -7455,8 +7461,8 @@ void onArrayValueFree(ArrayValue *arrayValue) {
     }
 #endif
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/hooks.cpp
 // -----------------------------------------------------------------------------
@@ -7469,7 +7475,7 @@ namespace eez {
 namespace flow {
 static void replacePage(int16_t pageId, uint32_t animType, uint32_t speed, uint32_t delay) {
 #if EEZ_OPTION_GUI
-    eez::gui::getAppContextFromId(APP_CONTEXT_ID_DEVICE)->replacePage(pageId);
+	eez::gui::getAppContextFromId(APP_CONTEXT_ID_DEVICE)->replacePage(pageId);
 #else
     EEZ_UNUSED(pageId);
     EEZ_UNUSED(animType);
@@ -7477,7 +7483,7 @@ static void replacePage(int16_t pageId, uint32_t animType, uint32_t speed, uint3
     EEZ_UNUSED(delay);
 #endif
 }
-static void showKeyboard(Value label, Value initialText, Value minChars, Value maxChars, bool isPassword, void (*onOk)(char *), void (*onCancel)()) {
+static void showKeyboard(Value label, Value initialText, Value minChars, Value maxChars, bool isPassword, void(*onOk)(char *), void(*onCancel)()) {
     EEZ_UNUSED(label);
     EEZ_UNUSED(initialText);
     EEZ_UNUSED(minChars);
@@ -7486,7 +7492,7 @@ static void showKeyboard(Value label, Value initialText, Value minChars, Value m
     EEZ_UNUSED(onOk);
     EEZ_UNUSED(onCancel);
 }
-static void showKeypad(Value label, Value initialValue, Value min, Value max, Unit unit, void (*onOk)(float), void (*onCancel)()) {
+static void showKeypad(Value label, Value initialValue, Value min, Value max, Unit unit, void(*onOk)(float), void(*onCancel)()) {
     EEZ_UNUSED(label);
     EEZ_UNUSED(initialValue);
     EEZ_UNUSED(min);
@@ -7496,7 +7502,7 @@ static void showKeypad(Value label, Value initialValue, Value min, Value max, Un
     EEZ_UNUSED(onCancel);
 }
 static void stopScript() {
-    assert(false);
+	assert(false);
 }
 static void scpiComponentInit() {
 }
@@ -7511,8 +7517,8 @@ static void finishToDebuggerMessage() {
 static void onDebuggerInputAvailable() {
 }
 void (*replacePageHook)(int16_t pageId, uint32_t animType, uint32_t speed, uint32_t delay) = replacePage;
-void (*showKeyboardHook)(Value label, Value initialText, Value minChars, Value maxChars, bool isPassword, void (*onOk)(char *), void (*onCancel)()) = showKeyboard;
-void (*showKeypadHook)(Value label, Value initialValue, Value min, Value max, Unit unit, void (*onOk)(float), void (*onCancel)()) = showKeypad;
+void (*showKeyboardHook)(Value label, Value initialText, Value minChars, Value maxChars, bool isPassword, void(*onOk)(char *), void(*onCancel)()) = showKeyboard;
+void (*showKeypadHook)(Value label, Value initialValue, Value min, Value max, Unit unit, void(*onOk)(float), void(*onCancel)()) = showKeypad;
 void (*stopScriptHook)() = stopScript;
 void (*scpiComponentInitHook)() = scpiComponentInit;
 void (*startToDebuggerMessageHook)() = startToDebuggerMessage;
@@ -7581,8 +7587,8 @@ static double getDateNowDefaultImplementation() {
 }
 double (*getDateNowHook)() = getDateNowDefaultImplementation;
 void (*onFlowErrorHook)(FlowState *flowState, int componentIndex, const char *errorMessage) = nullptr;
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/lvgl_api.cpp
 // -----------------------------------------------------------------------------
@@ -7755,7 +7761,8 @@ void eez_flow_delete_screen_on_unload(int screenIndex) {
         eez::flow::getLvglObjectFromIndexHook(screenIndex),
         on_screen_unloaded,
         LV_EVENT_SCREEN_UNLOADED,
-        (void *)(lv_uintptr_t)(screenIndex));
+        (void*)(lv_uintptr_t)(screenIndex)
+    );
 }
 extern "C" void eez_flow_init(const uint8_t *assets, uint32_t assetsSize, lv_obj_t **objects, size_t numObjects, const ext_img_desc_t *images, size_t numImages, ActionExecFunc *actions) {
     g_objects = objects;
@@ -7783,7 +7790,8 @@ extern "C" void eez_flow_init(const uint8_t *assets, uint32_t assetsSize, lv_obj
 }
 extern "C" void eez_flow_init_styles(
     void (*add_style)(lv_obj_t *obj, int32_t styleIndex),
-    void (*remove_style)(lv_obj_t *obj, int32_t styleIndex)) {
+    void (*remove_style)(lv_obj_t *obj, int32_t styleIndex)
+) {
     eez::flow::lvglObjAddStyleHook = add_style;
     eez::flow::lvglObjRemoveStyleHook = remove_style;
 }
@@ -7814,7 +7822,7 @@ extern "C" bool eez_flow_is_stopped() {
     return eez::flow::isFlowStopped();
 }
 namespace eez {
-ActionExecFunc g_actionExecFunctions[] = {0};
+ActionExecFunc g_actionExecFunctions[] = { 0 };
 }
 void replacePageHook(int16_t pageId, uint32_t animType, uint32_t speed, uint32_t delay) {
     int16_t screenIndex = pageId - 1;
@@ -7849,11 +7857,11 @@ extern "C" void flowPropagateValueLVGLEvent(void *flowState, unsigned componentI
     uint32_t key = 0;
     if (event_code == LV_EVENT_KEY || (event_code == LV_EVENT_VALUE_CHANGED &&
 #if LVGL_VERSION_MAJOR >= 9
-                                       lv_obj_check_type((lv_obj_t *)target, &lv_buttonmatrix_class)
+        lv_obj_check_type((lv_obj_t*)target, &lv_buttonmatrix_class)
 #else
-                                       lv_obj_check_type((lv_obj_t *)target, &lv_btnmatrix_class)
+        lv_obj_check_type((lv_obj_t*)target, &lv_btnmatrix_class)
 #endif
-                                           )) {
+    )) {
         uint32_t *param = (uint32_t *)lv_event_get_param(event);
         key = param ? *param : 0;
     }
@@ -7881,7 +7889,9 @@ extern "C" void flowPropagateValueLVGLEvent(void *flowState, unsigned componentI
     eez::flow::propagateValue(
         (eez::flow::FlowState *)flowState, componentIndex, outputIndex,
         eez::Value::makeLVGLEventRef(
-            code, currentTarget, target, userData, key, gestureDir, rotaryDiff, 0xe7f23624));
+            code, currentTarget, target, userData, key, gestureDir, rotaryDiff, 0xe7f23624
+        )
+    );
     g_lastLVGLEvent = *event;
     if (event->user_data) {
         g_lastLVGLEvent.user_data = &g_lastLVGLEventUserDataBuffer;
@@ -8031,14 +8041,14 @@ extern "C" bool compareRollerOptions(lv_roller_t *roller, const char *new_val, c
 uint32_t eez_flow_get_selected_theme_index() {
     return g_selectedThemeIndex;
 }
-#endif
+#endif 
 // -----------------------------------------------------------------------------
 // flow/operations.cpp
 // -----------------------------------------------------------------------------
-#include <inttypes.h>
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
+#include <inttypes.h>
 #include <string>
 #if defined(EEZ_DASHBOARD_API)
 #endif
@@ -8054,7 +8064,7 @@ using namespace eez::gui;
 int g_eezFlowLvlgMeterTickIndex = 0;
 namespace eez {
 namespace flow {
-Value op_add(const Value &a1, const Value &b1) {
+Value op_add(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8105,7 +8115,7 @@ Value op_add(const Value &a1, const Value &b1) {
     }
     return Value((int)(a.int32Value + b.int32Value), VALUE_TYPE_INT32);
 }
-Value op_sub(const Value &a1, const Value &b1) {
+Value op_sub(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8131,7 +8141,7 @@ Value op_sub(const Value &a1, const Value &b1) {
     }
     return Value((int)(a.int32Value - b.int32Value), VALUE_TYPE_INT32);
 }
-Value op_mul(const Value &a1, const Value &b1) {
+Value op_mul(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8157,7 +8167,7 @@ Value op_mul(const Value &a1, const Value &b1) {
     }
     return Value((int)(a.int32Value * b.int32Value), VALUE_TYPE_INT32);
 }
-Value op_div(const Value &a1, const Value &b1) {
+Value op_div(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8190,7 +8200,7 @@ Value op_div(const Value &a1, const Value &b1) {
     }
     return Value(1.0 * a.int32Value / b.int32Value, VALUE_TYPE_DOUBLE);
 }
-Value op_mod(const Value &a1, const Value &b1) {
+Value op_mod(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8223,7 +8233,7 @@ Value op_mod(const Value &a1, const Value &b1) {
     }
     return Value((int)(a.int32Value % b.int32Value), VALUE_TYPE_INT32);
 }
-Value op_left_shift(const Value &a1, const Value &b1) {
+Value op_left_shift(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8243,7 +8253,7 @@ Value op_left_shift(const Value &a1, const Value &b1) {
     }
     return Value((int)(a.toInt32() << b.toInt32()), VALUE_TYPE_INT32);
 }
-Value op_right_shift(const Value &a1, const Value &b1) {
+Value op_right_shift(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8263,7 +8273,7 @@ Value op_right_shift(const Value &a1, const Value &b1) {
     }
     return Value((int)(a.toInt32() >> b.toInt32()), VALUE_TYPE_INT32);
 }
-Value op_binary_and(const Value &a1, const Value &b1) {
+Value op_binary_and(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8283,7 +8293,7 @@ Value op_binary_and(const Value &a1, const Value &b1) {
     }
     return Value((int)(a.toInt32() & b.toInt32()), VALUE_TYPE_INT32);
 }
-Value op_binary_or(const Value &a1, const Value &b1) {
+Value op_binary_or(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8303,7 +8313,7 @@ Value op_binary_or(const Value &a1, const Value &b1) {
     }
     return Value((int)(a.toInt32() | b.toInt32()), VALUE_TYPE_INT32);
 }
-Value op_binary_xor(const Value &a1, const Value &b1) {
+Value op_binary_xor(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8323,7 +8333,7 @@ Value op_binary_xor(const Value &a1, const Value &b1) {
     }
     return Value((int)(a.toInt32() ^ b.toInt32()), VALUE_TYPE_INT32);
 }
-static bool is_equal(const Value &a1, const Value &b1) {
+static bool is_equal(const Value& a1, const Value& b1) {
     auto a = a1.getValue();
     auto b = b1.getValue();
     auto aIsUndefinedOrNull = a.getType() == VALUE_TYPE_UNDEFINED || a.getType() == VALUE_TYPE_NULL;
@@ -8366,7 +8376,7 @@ static bool is_equal(const Value &a1, const Value &b1) {
     }
     return a.toDouble() == b.toDouble();
 }
-static bool is_less(const Value &a1, const Value &b1) {
+static bool is_less(const Value& a1, const Value& b1) {
     auto a = a1.getValue();
     auto b = b1.getValue();
     if (a.isString() && b.isString()) {
@@ -8379,10 +8389,10 @@ static bool is_less(const Value &a1, const Value &b1) {
     }
     return a.toDouble() < b.toDouble();
 }
-static bool is_great(const Value &a1, const Value &b1) {
+static bool is_great(const Value& a1, const Value& b1) {
     return !is_less(a1, b1) && !is_equal(a1, b1);
 }
-Value op_eq(const Value &a1, const Value &b1) {
+Value op_eq(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8391,7 +8401,7 @@ Value op_eq(const Value &a1, const Value &b1) {
     }
     return Value(is_equal(a1, b1), VALUE_TYPE_BOOLEAN);
 }
-Value op_neq(const Value &a1, const Value &b1) {
+Value op_neq(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8400,7 +8410,7 @@ Value op_neq(const Value &a1, const Value &b1) {
     }
     return Value(!is_equal(a1, b1), VALUE_TYPE_BOOLEAN);
 }
-Value op_less(const Value &a1, const Value &b1) {
+Value op_less(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8409,7 +8419,7 @@ Value op_less(const Value &a1, const Value &b1) {
     }
     return Value(is_less(a1, b1), VALUE_TYPE_BOOLEAN);
 }
-Value op_great(const Value &a1, const Value &b1) {
+Value op_great(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8418,7 +8428,7 @@ Value op_great(const Value &a1, const Value &b1) {
     }
     return Value(is_great(a1, b1), VALUE_TYPE_BOOLEAN);
 }
-Value op_less_eq(const Value &a1, const Value &b1) {
+Value op_less_eq(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8427,7 +8437,7 @@ Value op_less_eq(const Value &a1, const Value &b1) {
     }
     return Value(is_less(a1, b1) || is_equal(a1, b1), VALUE_TYPE_BOOLEAN);
 }
-Value op_great_eq(const Value &a1, const Value &b1) {
+Value op_great_eq(const Value& a1, const Value& b1) {
     if (a1.isError()) {
         return a1;
     }
@@ -8726,7 +8736,7 @@ static void do_OPERATION_TYPE_FLOW_IS_PAGE_ACTIVE(EvalStack &stack) {
         if (stack.flowState->assets == g_externalAssets) {
             pageId = -pageId;
         }
-        for (int16_t appContextId = 0;; appContextId++) {
+        for (int16_t appContextId = 0; ; appContextId++) {
             auto appContext = getAppContextFromId(appContextId);
             if (!appContext) {
                 break;
@@ -8743,7 +8753,7 @@ static void do_OPERATION_TYPE_FLOW_IS_PAGE_ACTIVE(EvalStack &stack) {
     stack.push(Value(pageIndex == g_currentScreen, VALUE_TYPE_BOOLEAN));
 #else
     stack.push(Value::makeError());
-#endif
+#endif 
 }
 static void do_OPERATION_TYPE_FLOW_PAGE_TIMELINE_POSITION(EvalStack &stack) {
     stack.push(Value(stack.flowState->timelinePosition, VALUE_TYPE_FLOAT));
@@ -8912,7 +8922,7 @@ static void do_OPERATION_TYPE_FLOW_GET_BITMAP_INDEX(EvalStack &stack) {
     stack.push(Value(bitmapId, VALUE_TYPE_INT32));
 #else
     stack.push(Value::makeError());
-#endif
+#endif 
 }
 static void do_OPERATION_TYPE_FLOW_GET_BITMAP_AS_DATA_URL(EvalStack &stack) {
 #if defined(EEZ_DASHBOARD_API)
@@ -8925,7 +8935,7 @@ static void do_OPERATION_TYPE_FLOW_GET_BITMAP_AS_DATA_URL(EvalStack &stack) {
     stack.push(getBitmapAsDataURL(bitmapName.getString()));
 #else
     stack.push(Value::makeError());
-#endif
+#endif 
 }
 static void do_OPERATION_TYPE_DATE_NOW(EvalStack &stack) {
     stack.push(Value((double)date::now(), VALUE_TYPE_DATE));
@@ -9358,12 +9368,12 @@ static void do_OPERATION_TYPE_MATH_CEIL(EvalStack &stack) {
     stack.push(Value::makeError());
 }
 static float roundN(float value, unsigned int numDigits) {
-    float pow_10 = pow(10.0f, numDigits);
-    return round(value * pow_10) / pow_10;
+  float pow_10 = pow(10.0f, numDigits);
+  return round(value * pow_10) / pow_10;
 }
 static double roundN(double value, unsigned int numDigits) {
-    float pow_10 = pow(10.0f, numDigits);
-    return round(value * pow_10) / pow_10;
+  float pow_10 = pow(10.0f, numDigits);
+  return round(value * pow_10) / pow_10;
 }
 static void do_OPERATION_TYPE_MATH_ROUND(EvalStack &stack) {
     auto numArgs = stack.pop().getInt();
@@ -9553,33 +9563,20 @@ typedef enum {
     length_t,
     length_L
 } FormatLength;
-static size_t do_string_format(FormatType type, const Value &b, char *result, size_t result_size, const char *format) {
-    if (type == type_int)
-        return snprintf(result, result_size, format, (int)b.getInt());
-    if (type == type_signed_char)
-        return snprintf(result, result_size, format, (signed char)b.getInt32());
-    if (type == type_short_int)
-        return snprintf(result, result_size, format, (short int)b.getInt32());
-    if (type == type_long_int)
-        return snprintf(result, result_size, format, (long int)b.getInt64());
-    if (type == type_long_long_int)
-        return snprintf(result, result_size, format, (long long int)b.getInt64());
-    if (type == type_intmax_t)
-        return snprintf(result, result_size, format, (intmax_t)b.getInt64());
-    if (type == type_size_t)
-        return snprintf(result, result_size, format, (size_t)b.getInt64());
-    if (type == type_unsigned_int)
-        return snprintf(result, result_size, format, (unsigned int)b.getUInt32());
-    if (type == type_unsigned_char)
-        return snprintf(result, result_size, format, (unsigned char)b.getUInt32());
-    if (type == type_unsigned_short_int)
-        return snprintf(result, result_size, format, (unsigned short int)b.getUInt32());
-    if (type == type_unsigned_long_int)
-        return snprintf(result, result_size, format, (unsigned long int)b.getUInt64());
-    if (type == type_unsigned_long_long_int)
-        return snprintf(result, result_size, format, (unsigned long long int)b.getUInt64());
-    if (type == type_uintmax_t)
-        return snprintf(result, result_size, format, (uintmax_t)b.getUInt64());
+static size_t do_string_format(FormatType type, const Value& b, char *result, size_t result_size, const char *format) {
+    if (type == type_int) return snprintf(result, result_size, format, (int)b.getInt());
+    if (type == type_signed_char) return snprintf(result, result_size, format, (signed char)b.getInt32());
+    if (type == type_short_int) return snprintf(result, result_size, format, (short int)b.getInt32());
+    if (type == type_long_int) return snprintf(result, result_size, format, (long int)b.getInt64());
+    if (type == type_long_long_int) return snprintf(result, result_size, format, (long long int)b.getInt64());
+    if (type == type_intmax_t) return snprintf(result, result_size, format, (intmax_t)b.getInt64());
+    if (type == type_size_t) return snprintf(result, result_size, format, (size_t)b.getInt64());
+    if (type == type_unsigned_int) return snprintf(result, result_size, format, (unsigned int)b.getUInt32());
+    if (type == type_unsigned_char) return snprintf(result, result_size, format, (unsigned char)b.getUInt32());
+    if (type == type_unsigned_short_int) return snprintf(result, result_size, format, (unsigned short int)b.getUInt32());
+    if (type == type_unsigned_long_int) return snprintf(result, result_size, format, (unsigned long int)b.getUInt64());
+    if (type == type_unsigned_long_long_int) return snprintf(result, result_size, format, (unsigned long long int)b.getUInt64());
+    if (type == type_uintmax_t) return snprintf(result, result_size, format, (uintmax_t)b.getUInt64());
     if (type == type_double) {
         if (b.isDouble()) {
             return snprintf(result, result_size, format, b.getDouble());
@@ -9614,26 +9611,18 @@ static void do_OPERATION_TYPE_STRING_FORMAT(EvalStack &stack) {
         stack.push(Value::makeError());
         return;
     }
-    char specifier = format[formatLength - 1];
-    char l1 = formatLength > 1 ? format[formatLength - 2] : 0;
-    char l2 = formatLength > 2 ? format[formatLength - 3] : 0;
+    char specifier = format[formatLength-1];
+    char l1 = formatLength > 1 ? format[formatLength-2] : 0;
+    char l2 = formatLength > 2 ? format[formatLength-3] : 0;
     FormatLength length = length_none;
-    if (l1 == 'h' && l2 == 'h')
-        length = length_hh;
-    else if (l1 == 'h')
-        length = length_h;
-    else if (l1 == 'l')
-        length = length_l;
-    else if (l1 == 'l' && l2 == 'l')
-        length = length_ll;
-    else if (l1 == 'j')
-        length = length_j;
-    else if (l1 == 'z')
-        length = length_z;
-    else if (l1 == 't')
-        length = length_t;
-    else if (l1 == 'L')
-        length = length_L;
+    if (l1 == 'h' && l2 == 'h') length = length_hh;
+    else if (l1 == 'h') length = length_h;
+    else if (l1 == 'l') length = length_l;
+    else if (l1 == 'l' && l2 == 'l') length = length_ll;
+    else if (l1 == 'j') length = length_j;
+    else if (l1 == 'z') length = length_z;
+    else if (l1 == 't') length = length_t;
+    else if (l1 == 'L') length = length_L;
     FormatType type = type_int;
     if (specifier == 'd' || specifier == 'i') {
         if (length == length_none) {
@@ -10119,8 +10108,8 @@ static void do_OPERATION_TYPE_CRYPTO_SHA256(EvalStack &stack) {
     BYTE buf[SHA256_BLOCK_SIZE];
     SHA256_CTX ctx;
     sha256_init(&ctx);
-    sha256_update(&ctx, data, dataLen);
-    sha256_final(&ctx, buf);
+	sha256_update(&ctx, data, dataLen);
+	sha256_final(&ctx, buf);
     auto result = Value::makeBlobRef(buf, SHA256_BLOCK_SIZE, 0x1f0c0c0c);
     stack.push(result);
 #else
@@ -10379,8 +10368,8 @@ EvalOperation g_evalOperations[] = {
     do_OPERATION_TYPE_BLOB_TO_STRING,
     do_OPERATION_TYPE_FLOW_THEMES,
 };
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/private.cpp
 // -----------------------------------------------------------------------------
@@ -10396,7 +10385,7 @@ namespace flow {
 GlobalVariables *g_globalVariables = nullptr;
 static const unsigned NO_COMPONENT_INDEX = 0xFFFFFFFF;
 static bool g_enableThrowError = true;
-inline bool isInputEmpty(const Value &inputValue) {
+inline bool isInputEmpty(const Value& inputValue) {
     return inputValue.type == VALUE_TYPE_UNDEFINED && inputValue.int32Value > 0;
 }
 inline Value getEmptyInputValue() {
@@ -10408,22 +10397,23 @@ void initGlobalVariables(Assets *assets) {
     if (!g_mainAssetsUncompressed) {
         return;
     }
-    auto flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
+	auto flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
     auto numVars = flowDefinition->globalVariables.count;
-    g_globalVariables = (GlobalVariables *)alloc(
+    g_globalVariables = (GlobalVariables *) alloc(
         sizeof(GlobalVariables) +
-            (numVars > 0 ? numVars - 1 : 0) * sizeof(Value),
-        0xcc34ca8e);
+        (numVars > 0 ? numVars - 1 : 0) * sizeof(Value),
+        0xcc34ca8e
+    );
     for (uint32_t i = 0; i < numVars; i++) {
-        new (g_globalVariables->values + i) Value();
+		new (g_globalVariables->values + i) Value();
         g_globalVariables->values[i] = flowDefinition->globalVariables[i]->clone();
-    }
+	}
 }
 static bool isComponentReadyToRun(FlowState *flowState, unsigned componentIndex) {
-    auto component = flowState->flow->components[componentIndex];
-    if (component->type == defs_v3::COMPONENT_TYPE_CATCH_ERROR_ACTION) {
-        return false;
-    }
+	auto component = flowState->flow->components[componentIndex];
+	if (component->type == defs_v3::COMPONENT_TYPE_CATCH_ERROR_ACTION) {
+		return false;
+	}
     if (component->type == defs_v3::COMPONENT_TYPE_ON_EVENT_ACTION) {
         return false;
     }
@@ -10445,57 +10435,59 @@ static bool isComponentReadyToRun(FlowState *flowState, unsigned componentIndex)
             return true;
         }
     }
-    int numSeqInputs = 0;
-    int numDefinedSeqInputs = 0;
-    for (unsigned inputIndex = 0; inputIndex < component->inputs.count; inputIndex++) {
-        auto inputValueIndex = component->inputs[inputIndex];
-        auto input = flowState->flow->componentInputs[inputValueIndex];
-        if (input & COMPONENT_INPUT_FLAG_IS_SEQ_INPUT) {
-            numSeqInputs++;
-            auto &value = flowState->values[inputValueIndex];
-            if (!isInputEmpty(value)) {
-                numDefinedSeqInputs++;
-            }
-        } else {
-            if (!(input & COMPONENT_INPUT_FLAG_IS_OPTIONAL)) {
-                auto &value = flowState->values[inputValueIndex];
-                if (isInputEmpty(value)) {
-                    return false;
-                }
-            }
-        }
-    }
-    if (numSeqInputs && !numDefinedSeqInputs) {
-        return false;
-    }
-    return true;
+	int numSeqInputs = 0;
+	int numDefinedSeqInputs = 0;
+	for (unsigned inputIndex = 0; inputIndex < component->inputs.count; inputIndex++) {
+		auto inputValueIndex = component->inputs[inputIndex];
+		auto input = flowState->flow->componentInputs[inputValueIndex];
+		if (input & COMPONENT_INPUT_FLAG_IS_SEQ_INPUT) {
+			numSeqInputs++;
+			auto &value = flowState->values[inputValueIndex];
+			if (!isInputEmpty(value)) {
+				numDefinedSeqInputs++;
+			}
+		} else {
+			if (!(input & COMPONENT_INPUT_FLAG_IS_OPTIONAL)) {
+				auto &value = flowState->values[inputValueIndex];
+				if (isInputEmpty(value)) {
+					return false;
+				}
+			}
+		}
+	}
+	if (numSeqInputs && !numDefinedSeqInputs) {
+		return false;
+	}
+	return true;
 }
 static bool pingComponent(FlowState *flowState, unsigned componentIndex, int sourceComponentIndex = -1, int sourceOutputIndex = -1, int targetInputIndex = -1) {
-    if (isComponentReadyToRun(flowState, componentIndex)) {
-        return addToQueue(flowState, componentIndex, sourceComponentIndex, sourceOutputIndex, targetInputIndex, false);
-    }
-    return false;
+	if (isComponentReadyToRun(flowState, componentIndex)) {
+		return addToQueue(flowState, componentIndex, sourceComponentIndex, sourceOutputIndex, targetInputIndex, false);
+	}
+	return false;
 }
-static FlowState *initFlowState(Assets *assets, int flowIndex, FlowState *parentFlowState, int parentComponentIndex, const Value &inputValue) {
-    auto flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
-    auto flow = flowDefinition->flows[flowIndex];
-    auto nValues = flow->componentInputs.count + flow->localVariables.count;
-    FlowState *flowState = new (
-        alloc(
-            sizeof(FlowState) +
-                nValues * sizeof(Value) +
-                flow->components.count * sizeof(ComponenentExecutionState *) +
-                flow->components.count * sizeof(bool),
-            0x4c3b6ef5)) FlowState;
-    flowState->flowStateIndex = (int)((uint8_t *)flowState - ALLOC_BUFFER);
-    flowState->assets = assets;
-    flowState->flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
-    flowState->flow = flowDefinition->flows[flowIndex];
-    flowState->flowIndex = flowIndex;
-    flowState->error = false;
+static FlowState *initFlowState(Assets *assets, int flowIndex, FlowState *parentFlowState, int parentComponentIndex, const Value& inputValue) {
+	auto flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
+	auto flow = flowDefinition->flows[flowIndex];
+	auto nValues = flow->componentInputs.count + flow->localVariables.count;
+	FlowState *flowState = new (
+		alloc(
+			sizeof(FlowState) +
+			nValues * sizeof(Value) +
+			flow->components.count * sizeof(ComponenentExecutionState *) +
+			flow->components.count * sizeof(bool),
+			0x4c3b6ef5
+		)
+	) FlowState;
+	flowState->flowStateIndex = (int)((uint8_t *)flowState - ALLOC_BUFFER);
+	flowState->assets = assets;
+	flowState->flowDefinition = static_cast<FlowDefinition *>(assets->flowDefinition);
+	flowState->flow = flowDefinition->flows[flowIndex];
+	flowState->flowIndex = flowIndex;
+	flowState->error = false;
     flowState->deleteOnNextTick = false;
-    flowState->refCounter = 0;
-    flowState->parentFlowState = parentFlowState;
+	flowState->refCounter = 0;
+	flowState->parentFlowState = parentFlowState;
     flowState->executingComponentIndex = NO_COMPONENT_INDEX;
     flowState->timelinePosition = 0;
 #if defined(EEZ_FOR_LVGL)
@@ -10511,9 +10503,9 @@ static FlowState *initFlowState(Assets *assets, int flowIndex, FlowState *parent
             parentFlowState->firstChild = flowState;
             parentFlowState->lastChild = flowState;
         }
-        flowState->parentComponentIndex = parentComponentIndex;
-        flowState->parentComponent = parentComponentIndex == -1 ? nullptr : parentFlowState->flow->components[parentComponentIndex];
-    } else {
+		flowState->parentComponentIndex = parentComponentIndex;
+		flowState->parentComponent = parentComponentIndex == -1 ? nullptr : parentFlowState->flow->components[parentComponentIndex];
+	} else {
         if (g_lastFlowState) {
             g_lastFlowState->nextSibling = flowState;
             flowState->previousSibling = g_lastFlowState;
@@ -10523,50 +10515,50 @@ static FlowState *initFlowState(Assets *assets, int flowIndex, FlowState *parent
             g_firstFlowState = flowState;
             g_lastFlowState = flowState;
         }
-        flowState->parentComponentIndex = -1;
-        flowState->parentComponent = nullptr;
-    }
+		flowState->parentComponentIndex = -1;
+		flowState->parentComponent = nullptr;
+	}
     flowState->inputValue = inputValue;
     flowState->firstChild = nullptr;
     flowState->lastChild = nullptr;
     flowState->nextSibling = nullptr;
-    flowState->values = (Value *)(flowState + 1);
-    flowState->componenentExecutionStates = (ComponenentExecutionState **)(flowState->values + nValues);
+	flowState->values = (Value *)(flowState + 1);
+	flowState->componenentExecutionStates = (ComponenentExecutionState **)(flowState->values + nValues);
     flowState->componenentAsyncStates = (bool *)(flowState->componenentExecutionStates + flow->components.count);
-    for (unsigned i = 0; i < nValues; i++) {
-        new (flowState->values + i) Value();
-    }
-    Value emptyInputValue = getEmptyInputValue();
-    for (unsigned i = 0; i < flow->componentInputs.count; i++) {
-        flowState->values[i] = emptyInputValue;
-    }
-    for (unsigned i = 0; i < flow->localVariables.count; i++) {
-        auto value = flow->localVariables[i];
-        flowState->values[flow->componentInputs.count + i] = *value;
-    }
-    for (unsigned i = 0; i < flow->components.count; i++) {
-        flowState->componenentExecutionStates[i] = nullptr;
-        flowState->componenentAsyncStates[i] = false;
-    }
-    onFlowStateCreated(flowState);
-    for (unsigned componentIndex = 0; componentIndex < flow->components.count; componentIndex++) {
-        pingComponent(flowState, componentIndex);
-    }
-    return flowState;
+	for (unsigned i = 0; i < nValues; i++) {
+		new (flowState->values + i) Value();
+	}
+	Value emptyInputValue = getEmptyInputValue();
+	for (unsigned i = 0; i < flow->componentInputs.count; i++) {
+		flowState->values[i] = emptyInputValue;
+	}
+	for (unsigned i = 0; i < flow->localVariables.count; i++) {
+		auto value = flow->localVariables[i];
+		flowState->values[flow->componentInputs.count + i] = *value;
+	}
+	for (unsigned i = 0; i < flow->components.count; i++) {
+		flowState->componenentExecutionStates[i] = nullptr;
+		flowState->componenentAsyncStates[i] = false;
+	}
+	onFlowStateCreated(flowState);
+	for (unsigned componentIndex = 0; componentIndex < flow->components.count; componentIndex++) {
+		pingComponent(flowState, componentIndex);
+	}
+	return flowState;
 }
 FlowState *initActionFlowState(int flowIndex, FlowState *parentFlowState, int parentComponentIndex, const Value &inputValue) {
-    auto flowState = initFlowState(parentFlowState->assets, flowIndex, parentFlowState, parentComponentIndex, inputValue);
-    if (flowState) {
-        flowState->isAction = true;
-    }
-    return flowState;
+	auto flowState = initFlowState(parentFlowState->assets, flowIndex, parentFlowState, parentComponentIndex, inputValue);
+	if (flowState) {
+		flowState->isAction = true;
+	}
+	return flowState;
 }
 FlowState *initPageFlowState(Assets *assets, int flowIndex, FlowState *parentFlowState, int parentComponentIndex) {
-    auto flowState = initFlowState(assets, flowIndex, parentFlowState, parentComponentIndex, Value());
-    if (flowState) {
-        flowState->isAction = false;
-    }
-    return flowState;
+	auto flowState = initFlowState(assets, flowIndex, parentFlowState, parentComponentIndex, Value());
+	if (flowState) {
+		flowState->isAction = false;
+	}
+	return flowState;
 }
 void incRefCounterForFlowState(FlowState *flowState) {
     flowState->refCounter++;
@@ -10619,20 +10611,20 @@ void freeFlowState(FlowState *flowState) {
     if (flowState->nextSibling) {
         flowState->nextSibling->previousSibling = flowState->previousSibling;
     }
-    auto flow = flowState->flow;
-    auto valuesCount = flow->componentInputs.count + flow->localVariables.count;
-    for (unsigned int i = 0; i < valuesCount; i++) {
-        (flowState->values + i)->~Value();
-    }
-    for (unsigned i = 0; i < flow->components.count; i++) {
+	auto flow = flowState->flow;
+	auto valuesCount = flow->componentInputs.count + flow->localVariables.count;
+	for (unsigned int i = 0; i < valuesCount; i++) {
+		(flowState->values + i)->~Value();
+	}
+	for (unsigned i = 0; i < flow->components.count; i++) {
         deallocateComponentExecutionState(flowState, i);
-    }
+	}
     removeTasksFromQueueForFlowState(flowState);
     removeWatchesForFlowState(flowState);
     freeAllChildrenFlowStates(flowState->firstChild);
-    onFlowStateDestroyed(flowState);
-    flowState->~FlowState();
-    free(flowState);
+	onFlowStateDestroyed(flowState);
+	flowState->~FlowState();
+	free(flowState);
 }
 void freeAllChildrenFlowStates(FlowState *firstChildFlowState) {
     auto flowState = firstChildFlowState;
@@ -10657,7 +10649,7 @@ void deallocateComponentExecutionState(FlowState *flowState, unsigned componentI
 }
 void resetSequenceInputs(FlowState *flowState) {
     if (flowState->executingComponentIndex != NO_COMPONENT_INDEX) {
-        auto component = flowState->flow->components[flowState->executingComponentIndex];
+		auto component = flowState->flow->components[flowState->executingComponentIndex];
         flowState->executingComponentIndex = NO_COMPONENT_INDEX;
         if (component->type != defs_v3::COMPONENT_TYPE_OUTPUT_ACTION) {
             for (uint32_t i = 0; i < component->inputs.count; i++) {
@@ -10680,70 +10672,70 @@ void propagateValue(FlowState *flowState, unsigned componentIndex, unsigned outp
         return;
     }
     resetSequenceInputs(flowState);
-    auto component = flowState->flow->components[componentIndex];
-    auto componentOutput = component->outputs[outputIndex];
+	auto component = flowState->flow->components[componentIndex];
+	auto componentOutput = component->outputs[outputIndex];
     auto value2 = value.getValue();
-    for (unsigned connectionIndex = 0; connectionIndex < componentOutput->connections.count; connectionIndex++) {
-        auto connection = componentOutput->connections[connectionIndex];
-        auto pValue = &flowState->values[connection->targetInputIndex];
-        if (*pValue != value2) {
-            *pValue = value2;
-            onValueChanged(pValue);
-        }
-        pingComponent(flowState, connection->targetComponentIndex, componentIndex, outputIndex, connection->targetInputIndex);
-    }
+	for (unsigned connectionIndex = 0; connectionIndex < componentOutput->connections.count; connectionIndex++) {
+		auto connection = componentOutput->connections[connectionIndex];
+		auto pValue = &flowState->values[connection->targetInputIndex];
+		if (*pValue != value2) {
+			*pValue = value2;
+				onValueChanged(pValue);
+		}
+		pingComponent(flowState, connection->targetComponentIndex, componentIndex, outputIndex, connection->targetInputIndex);
+	}
 }
 void propagateValue(FlowState *flowState, unsigned componentIndex, unsigned outputIndex) {
-    auto &nullValue = *flowState->flowDefinition->constants[NULL_VALUE_INDEX];
-    propagateValue(flowState, componentIndex, outputIndex, nullValue);
+	auto &nullValue = *flowState->flowDefinition->constants[NULL_VALUE_INDEX];
+	propagateValue(flowState, componentIndex, outputIndex, nullValue);
 }
 void propagateValueThroughSeqout(FlowState *flowState, unsigned componentIndex) {
-    auto component = flowState->flow->components[componentIndex];
-    for (uint32_t i = 0; i < component->outputs.count; i++) {
-        if (component->outputs[i]->isSeqOut) {
-            propagateValue(flowState, componentIndex, i);
-            return;
-        }
-    }
+	auto component = flowState->flow->components[componentIndex];
+	for (uint32_t i = 0; i < component->outputs.count; i++) {
+		if (component->outputs[i]->isSeqOut) {
+			propagateValue(flowState, componentIndex, i);
+			return;
+		}
+	}
 }
 #if EEZ_OPTION_GUI
 void getValue(uint16_t dataId, DataOperationEnum operation, const WidgetCursor &widgetCursor, Value &value) {
-    if (!isFlowStopped()) {
-        FlowState *flowState = widgetCursor.flowState;
-        auto flow = flowState->flow;
-        WidgetDataItem *widgetDataItem = flow->widgetDataItems[dataId];
-        if (widgetDataItem && widgetDataItem->componentIndex != -1 && widgetDataItem->propertyValueIndex != -1) {
-            evalProperty(flowState, widgetDataItem->componentIndex, widgetDataItem->propertyValueIndex, value, FlowError::Plain("doGetFlowValue failed"), nullptr, widgetCursor.iterators, operation);
-        }
-    }
+	if (!isFlowStopped()) {
+		FlowState *flowState = widgetCursor.flowState;
+		auto flow = flowState->flow;
+		WidgetDataItem *widgetDataItem = flow->widgetDataItems[dataId];
+		if (widgetDataItem && widgetDataItem->componentIndex != -1 && widgetDataItem->propertyValueIndex != -1) {
+			evalProperty(flowState, widgetDataItem->componentIndex, widgetDataItem->propertyValueIndex, value, FlowError::Plain("doGetFlowValue failed"), nullptr, widgetCursor.iterators, operation);
+		}
+	}
 }
-void setValue(uint16_t dataId, const WidgetCursor &widgetCursor, const Value &value) {
-    if (!isFlowStopped()) {
-        FlowState *flowState = widgetCursor.flowState;
-        auto flow = flowState->flow;
-        WidgetDataItem *widgetDataItem = flow->widgetDataItems[dataId];
-        if (widgetDataItem && widgetDataItem->componentIndex != -1 && widgetDataItem->propertyValueIndex != -1) {
-            auto component = flow->components[widgetDataItem->componentIndex];
-            auto property = component->properties[widgetDataItem->propertyValueIndex];
-            Value dstValue;
-            if (evalAssignableExpression(flowState, widgetDataItem->componentIndex, property->evalInstructions, dstValue, FlowError::Plain("doSetFlowValue failed"), nullptr, widgetCursor.iterators)) {
-                assignValue(flowState, widgetDataItem->componentIndex, dstValue, value);
-            }
-        }
-    }
+void setValue(uint16_t dataId, const WidgetCursor &widgetCursor, const Value& value) {
+	if (!isFlowStopped()) {
+		FlowState *flowState = widgetCursor.flowState;
+		auto flow = flowState->flow;
+		WidgetDataItem *widgetDataItem = flow->widgetDataItems[dataId];
+		if (widgetDataItem && widgetDataItem->componentIndex != -1 && widgetDataItem->propertyValueIndex != -1) {
+			auto component = flow->components[widgetDataItem->componentIndex];
+			auto property = component->properties[widgetDataItem->propertyValueIndex];
+			Value dstValue;
+			if (evalAssignableExpression(flowState, widgetDataItem->componentIndex, property->evalInstructions, dstValue, FlowError::Plain("doSetFlowValue failed"), nullptr, widgetCursor.iterators)) {
+				assignValue(flowState, widgetDataItem->componentIndex, dstValue, value);
+			}
+		}
+	}
 }
 #endif
 void assignValue(FlowState *flowState, int componentIndex, Value &dstValue, const Value &srcValue) {
-    if (dstValue.getType() == VALUE_TYPE_FLOW_OUTPUT) {
-        propagateValue(flowState, componentIndex, dstValue.getUInt16(), srcValue);
-    } else if (dstValue.getType() == VALUE_TYPE_NATIVE_VARIABLE) {
+	if (dstValue.getType() == VALUE_TYPE_FLOW_OUTPUT) {
+		propagateValue(flowState, componentIndex, dstValue.getUInt16(), srcValue);
+	} else if (dstValue.getType() == VALUE_TYPE_NATIVE_VARIABLE) {
 #if EEZ_OPTION_GUI
-        set(g_widgetCursor, dstValue.getInt(), srcValue);
+		set(g_widgetCursor, dstValue.getInt(), srcValue);
 #else
-        setVar(dstValue.getInt(), srcValue);
+		setVar(dstValue.getInt(), srcValue);
 #endif
-    } else {
-        Value *pDstValue;
+	} else {
+		Value *pDstValue;
         uint32_t dstValueType = VALUE_TYPE_UNDEFINED;
         if (dstValue.getType() == VALUE_TYPE_ARRAY_ELEMENT_VALUE) {
             auto arrayElementValue = (ArrayElementValue *)dstValue.refValue;
@@ -10804,9 +10796,9 @@ void assignValue(FlowState *flowState, int componentIndex, Value &dstValue, cons
                 Value dstValue;
                 if (evalAssignableProperty(propertyRef->flowState, propertyRef->componentIndex, propertyRef->propertyIndex, dstValue, FlowError::Plain("Failed to evaluate an assignable user property in UserWidget"), nullptr, nullptr)) {
                     if (dstValue.getType() == VALUE_TYPE_FLOW_OUTPUT) {
-                        propagateValue(propertyRef->flowState, propertyRef->componentIndex, dstValue.getUInt16(), srcValue);
+		                propagateValue(propertyRef->flowState, propertyRef->componentIndex, dstValue.getUInt16(), srcValue);
                     } else {
-                        assignValue(flowState, componentIndex, dstValue, srcValue);
+	                    assignValue(flowState, componentIndex, dstValue, srcValue);
                         onValueChanged(pDstValue);
                     }
                 }
@@ -10824,10 +10816,11 @@ void assignValue(FlowState *flowState, int componentIndex, Value &dstValue, cons
         } else {
             char errorMessage[100];
             snprintf(errorMessage, sizeof(errorMessage), "Can not assign %s to %s\n",
-                     g_valueTypeNames[pDstValue->type](srcValue), g_valueTypeNames[srcValue.type](*pDstValue));
+                g_valueTypeNames[pDstValue->type](srcValue), g_valueTypeNames[srcValue.type](*pDstValue)
+            );
             throwError(flowState, componentIndex, FlowError::Plain(errorMessage));
         }
-    }
+	}
 }
 void clearInputValue(FlowState *flowState, int inputIndex) {
     flowState->values[inputIndex] = Value();
@@ -10837,7 +10830,7 @@ void startAsyncExecution(FlowState *flowState, int componentIndex) {
     if (!flowState->componenentAsyncStates[componentIndex]) {
         flowState->componenentAsyncStates[componentIndex] = true;
         onComponentAsyncStateChanged(flowState, componentIndex);
-        incRefCounterForFlowState(flowState);
+	    incRefCounterForFlowState(flowState);
     }
 }
 void endAsyncExecution(FlowState *flowState, int componentIndex) {
@@ -10859,9 +10852,9 @@ void endAsyncExecution(FlowState *flowState, int componentIndex) {
     }
 }
 void onEvent(FlowState *flowState, FlowEvent flowEvent, Value eventValue) {
-    for (unsigned componentIndex = 0; componentIndex < flowState->flow->components.count; componentIndex++) {
-        auto component = flowState->flow->components[componentIndex];
-        if (component->type == defs_v3::COMPONENT_TYPE_ON_EVENT_ACTION) {
+	for (unsigned componentIndex = 0; componentIndex < flowState->flow->components.count; componentIndex++) {
+		auto component = flowState->flow->components[componentIndex];
+		if (component->type == defs_v3::COMPONENT_TYPE_ON_EVENT_ACTION) {
             auto onEventComponent = (OnEventComponent *)component;
             if (onEventComponent->event == flowEvent) {
                 flowState->eventValue = eventValue;
@@ -10871,8 +10864,8 @@ void onEvent(FlowState *flowState, FlowEvent flowEvent, Value eventValue) {
                     }
                 }
             }
-        }
-    }
+		}
+	}
     if (flowEvent == FLOW_EVENT_KEYDOWN) {
         for (auto childFlowState = flowState->firstChild; childFlowState != nullptr; childFlowState = childFlowState->nextSibling) {
             onEvent(childFlowState, flowEvent, eventValue);
@@ -10883,14 +10876,14 @@ static bool findCatchErrorComponent(FlowState *flowState, FlowState *&catchError
     if (!flowState) {
         return false;
     }
-    for (unsigned componentIndex = 0; componentIndex < flowState->flow->components.count; componentIndex++) {
-        auto component = flowState->flow->components[componentIndex];
-        if (component->type == defs_v3::COMPONENT_TYPE_CATCH_ERROR_ACTION) {
-            catchErrorFlowState = flowState;
-            catchErrorComponentIndex = componentIndex;
-            return true;
-        }
-    }
+	for (unsigned componentIndex = 0; componentIndex < flowState->flow->components.count; componentIndex++) {
+		auto component = flowState->flow->components[componentIndex];
+		if (component->type == defs_v3::COMPONENT_TYPE_CATCH_ERROR_ACTION) {
+			catchErrorFlowState = flowState;
+			catchErrorComponentIndex = componentIndex;
+			return true;
+		}
+	}
     if (flowState->parentFlowState && flowState->parentComponent && flowState->parentComponent->errorCatchOutput != -1) {
         catchErrorFlowState = flowState->parentFlowState;
         catchErrorComponentIndex = flowState->parentComponentIndex;
@@ -10908,20 +10901,23 @@ void throwError(FlowState *flowState, int componentIndex, const char *errorMessa
 #elif defined(__EMSCRIPTEN__)
     printf("throwError: %s\n", errorMessage);
 #endif
-    if (component->errorCatchOutput != -1) {
-        propagateValue(
-            flowState,
-            componentIndex,
-            component->errorCatchOutput,
-            Value::makeStringRef(errorMessage, strlen(errorMessage), 0xef6f8414));
-    } else {
-        FlowState *catchErrorFlowState;
-        int catchErrorComponentIndex;
-        if (
+	if (component->errorCatchOutput != -1) {
+		propagateValue(
+			flowState,
+			componentIndex,
+			component->errorCatchOutput,
+			Value::makeStringRef(errorMessage, strlen(errorMessage), 0xef6f8414)
+		);
+	} else {
+		FlowState *catchErrorFlowState;
+		int catchErrorComponentIndex;
+		if (
             findCatchErrorComponent(
                 component->type == defs_v3::COMPONENT_TYPE_ERROR_ACTION ? flowState->parentFlowState : flowState,
                 catchErrorFlowState,
-                catchErrorComponentIndex)) {
+                catchErrorComponentIndex
+            )
+        ) {
             for (FlowState *fs = flowState; fs != catchErrorFlowState; fs = fs->parentFlowState) {
                 if (fs->isAction) {
                     fs->error = true;
@@ -10940,20 +10936,19 @@ void throwError(FlowState *flowState, int componentIndex, const char *errorMessa
                     catchErrorFlowState,
                     catchErrorComponentIndex,
                     component->errorCatchOutput,
-                    Value::makeStringRef(errorMessage, strlen(errorMessage), 0x9473eef3));
+                    Value::makeStringRef(errorMessage, strlen(errorMessage), 0x9473eef3)
+                );
             }
-        } else {
-            onFlowError(flowState, componentIndex, errorMessage);
-            stopScriptHook();
-        }
-    }
+		} else {
+			onFlowError(flowState, componentIndex, errorMessage);
+			stopScriptHook();
+		}
+	}
 }
 const char *FlowError::getMessage(char *messageStr, size_t messageStrLength, int flowIndex, int componentIndex) const {
-#define GET_MESSAGE(FMT, ...)                                                                                               \
-    if (file)                                                                                                               \
-        snprintf(messageStr, messageStrLength, FMT " | %d.%d | %s:%d", __VA_ARGS__, flowIndex, componentIndex, file, line); \
-    else                                                                                                                    \
-        snprintf(messageStr, messageStrLength, FMT " | %d.%d", __VA_ARGS__, flowIndex, componentIndex);
+    #define GET_MESSAGE(FMT, ...) \
+        if (file) snprintf(messageStr, messageStrLength, FMT " | %d.%d | %s:%d", __VA_ARGS__, flowIndex, componentIndex, file, line); \
+        else snprintf(messageStr, messageStrLength, FMT " | %d.%d", __VA_ARGS__, flowIndex, componentIndex);
     if (type == FLOW_ERROR_PLAIN) {
         if (description) {
             GET_MESSAGE("%s: %s", messagePart1, description);
@@ -11051,8 +11046,8 @@ void throwError(FlowState *flowState, int componentIndex, const FlowError &error
 void enableThrowError(bool enable) {
     g_enableThrowError = enable;
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/queue.cpp
 // -----------------------------------------------------------------------------
@@ -11063,8 +11058,8 @@ namespace flow {
 #endif
 static const unsigned QUEUE_SIZE = EEZ_FLOW_QUEUE_SIZE;
 static struct {
-    FlowState *flowState;
-    unsigned componentIndex;
+	FlowState *flowState;
+	unsigned componentIndex;
     bool continuousTask;
 } g_queue[QUEUE_SIZE];
 static unsigned g_queueHead;
@@ -11073,101 +11068,101 @@ static unsigned g_queueMax;
 static bool g_queueIsFull = false;
 unsigned g_numNonContinuousTaskInQueue;
 void queueReset() {
-    g_queueHead = 0;
-    g_queueTail = 0;
-    g_queueMax = 0;
-    g_queueIsFull = false;
+	g_queueHead = 0;
+	g_queueTail = 0;
+	g_queueMax  = 0;
+	g_queueIsFull = false;
     g_numNonContinuousTaskInQueue = 0;
 }
 size_t getQueueSize() {
-    if (g_queueHead == g_queueTail) {
-        if (g_queueIsFull) {
-            return QUEUE_SIZE;
-        }
-        return 0;
-    }
-    if (g_queueHead < g_queueTail) {
-        return g_queueTail - g_queueHead;
-    }
-    return QUEUE_SIZE - g_queueHead + g_queueTail;
+	if (g_queueHead == g_queueTail) {
+		if (g_queueIsFull) {
+			return QUEUE_SIZE;
+		}
+		return 0;
+	}
+	if (g_queueHead < g_queueTail) {
+		return g_queueTail - g_queueHead;
+	}
+	return QUEUE_SIZE - g_queueHead + g_queueTail;
 }
 size_t getMaxQueueSize() {
-    return g_queueMax;
+	return g_queueMax;
 }
 bool addToQueue(FlowState *flowState, unsigned componentIndex, int sourceComponentIndex, int sourceOutputIndex, int targetInputIndex, bool continuousTask) {
-    if (g_queueIsFull) {
+	if (g_queueIsFull) {
         throwError(flowState, componentIndex, "Execution queue is full\n");
-        return false;
-    }
-    g_queue[g_queueTail].flowState = flowState;
-    g_queue[g_queueTail].componentIndex = componentIndex;
+		return false;
+	}
+	g_queue[g_queueTail].flowState = flowState;
+	g_queue[g_queueTail].componentIndex = componentIndex;
     g_queue[g_queueTail].continuousTask = continuousTask;
-    g_queueTail = (g_queueTail + 1) % QUEUE_SIZE;
-    if (g_queueHead == g_queueTail) {
-        g_queueIsFull = true;
-    }
-    size_t queueSize = getQueueSize();
-    g_queueMax = g_queueMax < queueSize ? queueSize : g_queueMax;
+	g_queueTail = (g_queueTail + 1) % QUEUE_SIZE;
+	if (g_queueHead == g_queueTail) {
+		g_queueIsFull = true;
+	}
+	size_t queueSize = getQueueSize();
+	g_queueMax = g_queueMax < queueSize ? queueSize : g_queueMax;
     if (!continuousTask) {
         ++g_numNonContinuousTaskInQueue;
-        onAddToQueue(flowState, sourceComponentIndex, sourceOutputIndex, componentIndex, targetInputIndex);
+	    onAddToQueue(flowState, sourceComponentIndex, sourceOutputIndex, componentIndex, targetInputIndex);
     }
     incRefCounterForFlowState(flowState);
-    return true;
+	return true;
 }
 bool peekNextTaskFromQueue(FlowState *&flowState, unsigned &componentIndex, bool &continuousTask) {
-    if (g_queueHead == g_queueTail && !g_queueIsFull) {
-        return false;
-    }
-    flowState = g_queue[g_queueHead].flowState;
-    componentIndex = g_queue[g_queueHead].componentIndex;
+	if (g_queueHead == g_queueTail && !g_queueIsFull) {
+		return false;
+	}
+	flowState = g_queue[g_queueHead].flowState;
+	componentIndex = g_queue[g_queueHead].componentIndex;
     continuousTask = g_queue[g_queueHead].continuousTask;
-    return true;
+	return true;
 }
 void removeNextTaskFromQueue() {
-    auto flowState = g_queue[g_queueHead].flowState;
+	auto flowState = g_queue[g_queueHead].flowState;
     decRefCounterForFlowState(flowState);
     auto continuousTask = g_queue[g_queueHead].continuousTask;
-    g_queueHead = (g_queueHead + 1) % QUEUE_SIZE;
-    g_queueIsFull = false;
+	g_queueHead = (g_queueHead + 1) % QUEUE_SIZE;
+	g_queueIsFull = false;
     if (!continuousTask) {
         --g_numNonContinuousTaskInQueue;
-        onRemoveFromQueue();
+	    onRemoveFromQueue();
     }
 }
 bool isInQueue(FlowState *flowState, unsigned componentIndex) {
-    if (g_queueHead == g_queueTail && !g_queueIsFull) {
-        return false;
-    }
+	if (g_queueHead == g_queueTail && !g_queueIsFull) {
+		return false;
+	}
     unsigned int it = g_queueHead;
     while (true) {
-        if (g_queue[it].flowState == flowState && g_queue[it].componentIndex == componentIndex) {
+		if (g_queue[it].flowState == flowState && g_queue[it].componentIndex == componentIndex) {
             return true;
-        }
+		}
         it = (it + 1) % QUEUE_SIZE;
         if (it == g_queueTail) {
             break;
         }
-    }
+	}
     return false;
 }
 void removeTasksFromQueueForFlowState(FlowState *flowState) {
-    if (g_queueHead == g_queueTail && !g_queueIsFull) {
-        return;
-    }
+	if (g_queueHead == g_queueTail && !g_queueIsFull) {
+		return;
+	}
     unsigned int it = g_queueHead;
     while (true) {
-        if (g_queue[it].flowState == flowState) {
+		if (g_queue[it].flowState == flowState) {
             g_queue[it].flowState = 0;
-        }
+		}
         it = (it + 1) % QUEUE_SIZE;
         if (it == g_queueTail) {
             break;
         }
-    }
+	}
 }
-} // namespace flow
-} // namespace eez
+} 
+} 
 // -----------------------------------------------------------------------------
 // flow/watch_list.cpp
 // -----------------------------------------------------------------------------
@@ -11183,7 +11178,7 @@ struct WatchListNode {
 struct WatchList {
     WatchListNode *first;
     WatchListNode *last;
-    unsigned size;
+    unsigned       size;
 };
 static WatchList g_watchList;
 WatchListNode *watchListAdd(FlowState *flowState, unsigned componentIndex) {
@@ -11218,7 +11213,7 @@ void watchListRemove(WatchListNode *node) {
     g_watchList.size > 0 ? (g_watchList.size)-- : 0;
 }
 void visitWatchList() {
-    for (auto node = g_watchList.first; node;) {
+    for (auto node = g_watchList.first; node; ) {
         auto nextNode = node->next;
         if (canExecuteStep(node->flowState, node->componentIndex)) {
             executeWatchVariableComponent(node->flowState, node->componentIndex);
@@ -11252,5 +11247,5 @@ void removeWatchesForFlowState(FlowState *flowState) {
 unsigned getWatchListSize() {
     return g_watchList.size;
 }
-} // namespace flow
-} // namespace eez
+} 
+} 

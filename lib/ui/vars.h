@@ -22,8 +22,10 @@ enum FlowGlobalVariables {
 
 extern float get_var_temperature();
 extern void set_var_temperature(float value);
-extern float get_var_humidity();
-extern void set_var_humidity(float value);
+extern float get_var_relative_humidity();
+extern void set_var_relative_humidity(float value);
+extern float get_var_absolute_humidity();
+extern void set_var_absolute_humidity(float value);
 extern float get_var_temperature_setpoint();
 extern void set_var_temperature_setpoint(float value);
 extern int32_t get_var_solid_relay_st();

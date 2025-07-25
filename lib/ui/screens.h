@@ -29,17 +29,20 @@ typedef struct _objects_t {
     lv_obj_t *humidity;
     lv_obj_t *obj11;
     lv_obj_t *obj12;
-    lv_obj_t *countdown;
+    lv_obj_t *humidity_1;
     lv_obj_t *obj13;
-    lv_obj_t *arc_timer;
     lv_obj_t *obj14;
+    lv_obj_t *countdown;
     lv_obj_t *obj15;
+    lv_obj_t *arc_timer;
     lv_obj_t *obj16;
     lv_obj_t *obj17;
     lv_obj_t *obj18;
+    lv_obj_t *obj19;
+    lv_obj_t *obj20;
     lv_obj_t *cont_1;
     lv_obj_t *chart_1;
-    lv_obj_t *obj19;
+    lv_obj_t *obj21;
 } objects_t;
 
 extern objects_t objects;

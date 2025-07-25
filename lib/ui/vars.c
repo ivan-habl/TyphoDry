@@ -1,12 +1,13 @@
 #include "vars.h"
 
 float temperature;
-float humidity;
+float relative_humidity;
 float temperature_setpoint;
 int solid_relay_st;
 float time_setpoint;
 int32_t timer_seconds;
 int32_t drier_state = 0;
+float absolute_humidity;
 
 float get_var_temperature() {
     return temperature;
@@ -16,12 +17,20 @@ void set_var_temperature(float value) {
     temperature = value;
 }
 
-float get_var_humidity() {
-    return humidity;
+float get_var_relative_humidity() {
+    return relative_humidity;
 }
 
-void set_var_humidity(float value) {
-    humidity = value;
+void set_var_relative_humidity(float value) {
+    relative_humidity = value;
+}
+
+float get_var_absolute_humidity() {
+    return absolute_humidity;
+}
+
+void set_var_absolute_humidity(float value) {
+    absolute_humidity = value;
 }
 
 float get_var_temperature_setpoint() {
